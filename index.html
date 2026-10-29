@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Bamako Drive</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#55415D">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icons/icon.svg"><link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Open+Sans:wght@400;600&family=Rubik:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/game.css">
+<script type="importmap">{ "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/", "fflate": "./node_modules/fflate/esm/browser.js" } }</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="topleft"><canvas id="minimap" width="360" height="360" title="Appuie pour agrandir la carte"></canvas><div id="mapTap">⤢ carte</div><div id="where"></div></div>
+  <div id="topBtns"><button id="hudPause" aria-label="Pause">❚❚ Pause</button><button id="hudRadio" aria-label="Radio">📻 Radio</button><button id="hudMenu" aria-label="Menu">☰ Menu</button></div>
+  <div id="radio" class="hidden"><div id="radioHead"><b>📻 Radio Mali</b><button id="radioClose" aria-label="Fermer">✕</button></div><div id="radioList"></div><div id="radioNow">Radio éteinte</div><div id="radioCtl"><button id="radioNext">⏭ Suivant</button><button id="radioOff">⏹ Éteindre</button></div><label id="radioVol">Volume <input type="range" id="radioVolIn" min="0" max="1" step="0.05" value="0.8"></label><small>Extraits officiels de 30 s (Apple Music) · internet requis</small></div>
+  <div id="clock"><div id="clockTime">11:30</div><div id="clockPeriod">Jour</div></div>
+  <div id="limit" class="hidden"><span id="limitVal">50</span></div>
+  <div id="speedo"><div id="speedVal">0</div><div id="speedUnit">km/h</div><div id="rpmBar"><i id="rpmFill"></i></div><div id="gear">N</div></div>
+  <div id="score"><span id="scoreVal">100</span><small>conduite</small></div>
+  <div id="toast"></div>
+  <div id="fps" class="hidden"></div>
+</div>
+
+<div id="touch" class="hidden">
+  <div id="steerZone"><div id="wheel"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="8"/><circle cx="50" cy="50" r="9" fill="rgba(255,255,255,.55)"/><path d="M50 50 L50 8 M50 50 L12 72 M50 50 L88 72" stroke="rgba(255,255,255,.55)" stroke-width="7" fill="none"/></svg></div><span class="hint">glisse pour tourner</span></div>
+  <div id="pedals"><button id="btnBrake" class="pedal">FREIN</button><button id="btnGas" class="pedal gas">GAZ</button></div>
+  <div id="sideBtns"><button id="btnHand">frein main</button><button id="btnHorn">klaxon</button><button id="btnCam">caméra</button><button id="btnLights">phares</button><button id="btnTime">heure</button><button id="btnReset">remettre</button></div>
+</div>
+
+<div id="bigmap" class="hidden"><canvas id="bigmapCv"></canvas>
+  <div id="bmBar"><button id="bmIn" aria-label="Zoom +">+</button><button id="bmOut" aria-label="Zoom -">−</button><button id="bmCenter" aria-label="Centrer sur moi">◎</button><button id="bmClose" aria-label="Fermer">✕</button></div>
+  <div id="bmTitle">Carte de Bamako</div><div id="bmHint">Glisse pour déplacer · pince ou molette pour zoomer · touche M ou ✕ pour fermer</div></div>
+<div id="menu">
+  <div class="panel">
+    <h1>BAMAKO <span>DRIVE</span></h1>
+    <p class="sub">Conduis dans la vraie ville de Bamako : taxis, sotramas, motos Jakarta, feux, piétons, du jour à la nuit.</p>
+    <button id="exploreBtn" disabled>🗺 Exploration de la ville en 3D</button>
+    <button id="backGame" class="hidden">↩ Retour à la partie en cours</button>
+    <div class="row"><label>Véhicule</label><div id="carList" class="chips"></div></div>
+    <div class="row"><label>Départ</label><div id="placeList" class="chips"></div></div>
+    <div class="row"><label>Moment</label><div id="timeList" class="chips"><button data-t="jour" class="on">☀ Jour</button><button data-t="soir">🌇 Soir</button><button data-t="nuit">🌙 Nuit</button><button data-t="auto">⏱ Cycle</button></div></div>
+    <div class="row"><label>Trafic</label><div id="trafficList" class="chips"><button data-v="0.35">Calme</button><button data-v="0.7" class="on">Normal</button><button data-v="1">Dense</button></div></div>
+    <div class="row"><label>Qualité</label><div id="qualList" class="chips"><button data-q="auto" class="on">Auto</button><button data-q="low">Économe</button><button data-q="med">Moyenne</button><button data-q="high">Élevée</button></div></div>
+    <button id="play" disabled>Chargement…</button>
+    <div id="loadBar"><i id="loadFill"></i></div><div id="loadTxt">Préparation de la ville…</div>
+    <div class="help" id="helpPC"><b>Clavier :</b> ↑/W accélérer · ↓/S freiner/marche arrière · ←→/A D tourner · Espace frein à main · H klaxon · C caméra · L phares · T heure · R remettre sur la route · Échap ou P pause / reprise</div>
+    <div class="help hidden" id="helpTouch"><b>Tactile :</b> glisse à gauche pour tourner · GAZ / FREIN à droite · boutons pour klaxon, caméra, phares. Tourne ton téléphone en mode paysage.</div>
+    <label class="check hidden" id="tiltRow"><input type="checkbox" id="tilt"> Volant par inclinaison de ton téléphone</label>
+  </div>
+</div>
+<div id="pause" class="hidden"><div class="panel"><h2>Pause</h2><button id="resume">Reprendre</button><button id="toMenu">Menu : changer de véhicule / lieu</button><button id="fsBtn">Plein écran</button></div></div>
+<div id="explore" class="hidden">
+  <div id="exPad"></div><div id="exLabels"></div>
+  <div id="exTop"><div id="exTitle">Bamako vue du ciel</div><button id="exTime" aria-label="Moment de la journée">☀ Jour</button><button id="exQuit" aria-label="Quitter l'exploration">✕ Quitter</button></div>
+  <div id="exTools"><button id="exIn" aria-label="Zoom +">+</button><button id="exOut" aria-label="Zoom -">−</button><button id="exL" aria-label="Tourner à gauche">⟲</button><button id="exR" aria-label="Tourner à droite">⟳</button><button id="exUp" aria-label="Plus incliné">⤒</button><button id="exDown" aria-label="Vue du dessus">⤓</button></div>
+  <div id="exCard" class="hidden"><b id="exName"></b><button id="exDrive">🚗 Conduire ici</button></div>
+  <div id="exHint">1 doigt : tourner autour de la ville · 2 doigts : zoomer (pincer) et déplacer · molette : zoom · touche une pancarte pour y aller</div>
+</div>
+<div id="rotate" class="hidden">↻ Tourne ton téléphone en mode paysage</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

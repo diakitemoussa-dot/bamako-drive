@@ -1,0 +1,57 @@
+BAMAKO DRIVE - jeu de conduite dans la ville de Bamako (three.js, navigateur)
+==========================================================================
+
+LANCER LE JEU
+-------------
+Sur l'ordinateur : double-cliquer sur  lancer_jeu.bat  (Node.js est requis, il est déjà installé ici).
+Le navigateur s'ouvre sur http://localhost:8080 . Fermer la fenêtre noire pour arrêter.
+
+Sur téléphone / tablette (iPhone, iPad, Android) :
+  1. Brancher le téléphone sur le MEME Wi-Fi que l'ordinateur.
+  2. Dans la fenêtre noire du serveur, relever la ligne "On your phone : http://192.168.x.x:8080".
+  3. Ouvrir cette adresse dans Safari (iOS) ou Chrome (Android). Mettre le téléphone en mode paysage.
+  4. Option : "Ajouter à l'écran d'accueil" pour jouer en plein écran comme une application.
+  Si la page ne s'ouvre pas : autoriser "node.exe" dans le pare-feu Windows (réseau privé).
+
+METTRE LE JEU EN LIGNE (jouable de partout, sans l'ordinateur)
+-------------------------------------------------------------
+  npm run build        -> crée le dossier  dist/  (16 Mo, sans dépendances)
+  Déposer le dossier dist/ sur Netlify (glisser-déposer sur app.netlify.com/drop), GitHub Pages, Vercel, etc.
+  Le jeu est 100 % statique ; il faut simplement du HTTPS pour le mode hors ligne et la capteur d'inclinaison.
+
+COMMANDES
+---------
+Clavier :  W / Flèche haut = accélérer     S / Flèche bas = freiner puis marche arrière
+           A D / Flèches = tourner         Espace = frein à main (dérapage)
+           H = klaxon   C = caméra (poursuite / cockpit / haute)   L = phares   T = jour/soir/nuit   R = remettre sur la route   Échap = pause
+Manette :  gâchette droite = gaz, gauche = frein, stick = direction, A = frein à main, Y = caméra, X = klaxon
+Tactile :  glisser le doigt dans la zone de gauche = volant ; FREIN / GAZ à droite ; boutons en haut (frein main, klaxon, caméra, phares, heure, remettre, pause).
+           Menu : case "Volant par inclinaison" pour tourner en penchant le téléphone.
+
+CE QU'IL Y A DANS LE JEU
+------------------------
+- La ville de Bamako (4,7 x 5,2 km) : 15 000 bâtiments, 830 km de voies, le Niger, ponts, échangeurs, ronds-points, monuments.
+- 8 véhicules jouables : taxi, berline, 4x4, pick-up, sotrama, camion, moto Jakarta, tricycle (physique propre à chacun).
+- Circulation IA : voitures, sotramas, taxis, motos qui se faufilent, camions et tricycles lents ; priorités, feux, piétons qui traversent.
+- 84 carrefours à feux tricolores, 1 079 panneaux (vitesse, stop, cédez le passage, passage piétons).
+- Cycle jour / soir / nuit (soleil, lune, étoiles, fenêtres allumées, lampadaires, phares), option "Cycle" = une heure de jeu par minute.
+- Score de conduite : pénalités pour collisions et excès de vitesse (la limite s'affiche en haut à droite).
+- Mini-carte tournante avec les autres véhicules. Appuie (ou clique) dessus, ou touche M, pour ouvrir la grande carte : routes, fleuve Niger, lieux connus, ta position ; glisser = déplacer, molette ou pincement = zoom, ◎ = revenir sur toi, ✕ = fermer (le jeu est en pause pendant ce temps).
+- Qualité automatique selon l'appareil (Économe / Moyenne / Élevée) + résolution adaptative pour garder la fluidité. Forcer : ?q=low  ?q=med  ?q=high  ; afficher les images/s : ?fps
+
+RADIO
+-----
+Bouton 📻 Radio en jeu (touche N = morceau suivant) : Mix malien, Salif Keïta, Sidiki Diabaté, Oumou Sangaré, Djénéba Seck. Extraits officiels de 30 s (API publique iTunes), internet requis ; aucune musique n'est copiée dans le jeu.
+Tes propres mp3 : les mettre dans un dossier musique/ avec un fichier musique/liste.json  [{"title":"...","artist":"...","url":"musique/fichier.mp3"}]  -> station "Ma playlist".
+
+FICHIERS
+--------
+index.html, css/, js/        le jeu (main.js = boucle ; world.js = ville + shaders ; player.js = physique ; traffic*.js = IA, feux, piétons ; sky.js = jour/nuit)
+data/tiles/                  428 dalles de ville de 250 m (diffusées au fur et à mesure), data/graph*.json, signals.json, signs.json, vehicles.json
+tools/                       scripts d'export depuis Blender (export_a_meshes -> export_b_instances -> export_c_grids -> export_d_write, puis export_e_models.py avec Python)
+server.js / build.js         serveur local / construction du dossier à publier
+
+REFAIRE L'EXPORT APRES UNE MODIFICATION DU MODELE BLENDER
+---------------------------------------------------------
+Dans Blender (MCP) exécuter dans l'ordre : tools/export_a_meshes.py, export_b_instances.py, export_c_grids.py, export_d_write.py.
+Le graphe routier / feux / véhicules : python tools/export_e_models.py (après avoir regénéré traffic_graph.json et signals.json dans Documents/bamako_traffic).

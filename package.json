@@ -1,0 +1,18 @@
+{
+  "name": "bamako-drive",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "node build.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "three": "^0.170.0"
+  }
+}
