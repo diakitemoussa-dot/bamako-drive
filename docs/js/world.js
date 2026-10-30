@@ -34,7 +34,7 @@ export function makeCityMaterial() {
           float rip = sin(vWPos.x * 0.31 + uTime * 0.6) * sin(vWPos.z * 0.27 - uTime * 0.45);
           diffuseColor.rgb = mix(diffuseColor.rgb * (0.9 + 0.2 * rip), uSky * 0.85, fr * 0.7);
         } else if (cls == 4.0) {
-          emitC = vec3(1.0, 0.9, 0.7) * uNight * 2.2; diffuseColor.rgb += emitC * 0.0;
+          emitC = vec3(1.0, 0.9, 0.7) * uNight * 1.5; diffuseColor.rgb += emitC * 0.0;
         } else if (cls == 7.0) {
           diffuseColor.rgb = vec3(0.6, 0.01, 0.005); emitC = vec3(1.0, 0.06, 0.03) * uDusk * (0.8 + 0.5 * sin(uTime * 2.4)) * 3.2;
         } else if (cls == 5.0) {

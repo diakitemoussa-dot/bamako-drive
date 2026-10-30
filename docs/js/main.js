@@ -48,7 +48,7 @@ function setupLights() {
   const tex = glowTexture(); const pg = new THREE.PlaneGeometry(1, 1); pg.rotateX(-Math.PI/2);
   lampPool = new THREE.InstancedMesh(pg, new THREE.MeshBasicMaterial({ map: tex, color: 0xffd9a0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0 }), 2500); lampPool.frustumCulled = false; lampPool.count = 0; scene.add(lampPool);
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(2500*3), 3));
-  lampGlow = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size: 11, sizeAttenuation: true, color: 0xffe2b0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0 })); lampGlow.frustumCulled = false; scene.add(lampGlow);
+  lampGlow = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size: 8.5, sizeAttenuation: true, color: 0xffe2b0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0 })); lampGlow.frustumCulled = false; scene.add(lampGlow);
   world.onTilesChanged = refreshLamps;
   for (let i = 0; i < 2; i++) { const s = new THREE.SpotLight(0xfff0d0, 0, 95, 0.52, 0.55, 1.2); s.castShadow = false; scene.add(s); scene.add(s.target); headSpots.push(s); }
 }
@@ -74,7 +74,7 @@ let plRear = null;
 function setupPlayerRear() { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 1, 32, 32, 31); r.addColorStop(0, 'rgba(255,130,110,1)'); r.addColorStop(0.3, 'rgba(255,40,30,.75)'); r.addColorStop(1, 'rgba(255,20,10,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64);
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3)); plRear = new THREE.Points(geo, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(c), size: 2.2, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 })); plRear.frustumCulled = false; scene.add(plRear); }
 function updateNightLights(dt) {
-  const k = lightK(); lampPool.material.opacity = 0.55*k; lampGlow.material.opacity = 0.9*k; lampPool.visible = lampGlow.visible = k > 0.02;
+  const k = lightK(); lampPool.material.opacity = 0.34*k; lampGlow.material.opacity = 0.55*k; lampPool.visible = lampGlow.visible = k > 0.02;
   const on = state.lights === null ? k > 0.35 : state.lights; player.car.front.material.color.setScalar(on ? 1.6 : 0.85);
   const f = [Math.cos(player.yaw), Math.sin(player.yaw)], r = [-f[1], f[0]];
   headSpots.forEach((s, i) => { const side = i ? 0.55 : -0.55; s.intensity = on ? 900*Math.max(k, 0.25)*(prof.shadows ? 1.2 : 1) : 0; s.position.set(player.x + f[0]*player.len*0.45 + r[0]*side, player.y + 0.75, player.z + f[1]*player.len*0.45 + r[1]*side); s.target.position.set(player.x + f[0]*28 + r[0]*side*1.5, player.y - 0.2, player.z + f[1]*28 + r[1]*side*1.5); });
