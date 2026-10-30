@@ -32,6 +32,37 @@ export class Atmosphere {
   setPreset(name) { this.hours = PRESETS[name]; this.auto = false; }
   label() { const h = Math.floor(this.hours) % 24, m = Math.floor((this.hours % 1)*60); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); }
   period() { const e = this.elev; return e > 0.2 ? 'Jour' : e > -0.08 ? (this.hours < 12 ? 'Aube' : 'Soir') : 'Nuit'; }
+  /** Ciel de la vue exploration : vrai dégradé de ciel (horizon clair -> bleu profond), soleil, nuages, couleurs selon le moment ; remplace le voile blanc du ciel physique vu de loin */
+  _buildExSky() {
+    const mat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false,
+      uniforms: { uHor: { value: new THREE.Color() }, uMid: { value: new THREE.Color() }, uTop: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Color() }, uSun: { value: 1 }, uCloud: { value: 1 }, uCloudCol: { value: new THREE.Color() } },
+      vertexShader: 'varying vec3 vD; void main() { vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `varying vec3 vD; uniform vec3 uHor, uMid, uTop, uSunDir, uSunCol, uCloudCol; uniform float uSun, uCloud;
+        float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f); return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
+        void main() {
+          vec3 d = normalize(vD); float e = clamp(d.y, 0.0, 1.0);
+          vec3 c = mix(uHor, uMid, smoothstep(0.0, 0.16, e)); c = mix(c, uTop, smoothstep(0.12, 0.7, e));
+          if (d.y < 0.0) c = uHor;
+          float sd = max(dot(d, normalize(uSunDir)), 0.0);
+          c += uSunCol * (pow(sd, 6.0) * 0.28 + pow(sd, 90.0) * 0.7 + smoothstep(0.9993, 0.9998, sd) * 1.6) * uSun;
+          vec2 q = d.xz / (d.y + 0.18) * 1.7; float cl = n(q*1.1) * 0.55 + n(q*2.3 + 7.0) * 0.3 + n(q*4.7 + 3.0) * 0.15;
+          cl = smoothstep(0.5, 0.78, cl) * smoothstep(0.02, 0.2, d.y) * uCloud; c = mix(c, uCloudCol, cl * 0.85);
+          gl_FragColor = vec4(c, 1.0);
+        }` });
+    this.exSky = new THREE.Mesh(new THREE.SphereGeometry(7000, 32, 16), mat); this.exSky.visible = false; this.exSky.frustumCulled = false; this.exSky.renderOrder = -1; this.scene.add(this.exSky);
+  }
+  _exSkyUpdate(se, night) {
+    const m = this.exSky.material.uniforms, C = (r, g, b) => new THREE.Color(r/255, g/255, b/255);
+    const D = [C(205, 228, 246), C(120, 176, 232), C(52, 112, 198)], S = [C(250, 178, 112), C(176, 122, 158), C(58, 54, 112)], N = [C(40, 44, 84), C(18, 20, 52), C(8, 9, 28)];
+    const t1 = smooth(-0.12, 0.05, se), t2 = smooth(0.05, 0.45, se);
+    for (let k = 0; k < 3; k++) { const key = ['uHor', 'uMid', 'uTop'][k]; m[key].value.copy(N[k]).lerp(this.tmp.copy(S[k]).lerp(D[k], t2), t1); }
+    m.uSunDir.value.copy(this.sunDir.y >= -0.02 ? this.sunDir : this.sunDir.clone().negate());   // la nuit, le « disque » est la lune
+    m.uSunCol.value.setRGB(1.0, 0.86 - 0.3*(1 - t2), 0.62 - 0.35*(1 - t2)); if (se < 0) m.uSunCol.value.setRGB(0.75, 0.82, 1.0);
+    m.uSun.value = se >= 0 ? smooth(-0.1, 0.05, se) : 0.55*smooth(0.1, 0.5, night);
+    m.uCloud.value = 1 - 0.65*night; m.uCloudCol.value.setRGB(1, 1, 1).lerp(this.tmp.setRGB(0.98, 0.72, 0.62), (1 - t2)*t1).lerp(this.tmp.setRGB(0.16, 0.17, 0.3), 1 - t1);
+    this.fog.color.copy(m.uHor.value);                                                          // la brume au loin se fond dans l'horizon du ciel
+  }
   /** demi-largeur (m) de la zone ombrée autour du point regardé : petite en conduite, large en exploration */
   setShadowRange(r) { if (!this.sun.castShadow || Math.abs(r - this._sr) < this._sr*0.03) return; this._sr = r; const c = this.sun.shadow.camera; c.left = -r; c.right = r; c.top = r; c.bottom = -r; c.near = 10; c.far = r*4 + 600; c.updateProjectionMatrix(); }
   update(dt, focus) {
@@ -54,8 +85,9 @@ export class Atmosphere {
     this.hemi.intensity = Math.max(this.hemi.intensity, 0.46*night + 0.28);
     const horizon = this.tmp.setRGB(0.68, 0.77, 0.9).lerp(new THREE.Color(0.95, 0.52, 0.32), low*0.85*smooth(-0.1, 0.1, se + 0.05)).lerp(new THREE.Color(0.025, 0.04, 0.085), night);
     this.fog.color.copy(horizon); this.fog.near = 90 + 120*day; shared.uSky.value.copy(horizon).multiplyScalar(0.9 + 0.5*day);
-    this.sky.material.uniforms.rayleigh.value = 0.45 + 1.6*day + 1.4*low*day; this.renderer.toneMappingExposure = 0.62 + 0.42*day + 0.25*night*0.0; this.stars.material.opacity = smooth(0.35, 0.95, night); this.stars.position.copy(focus);
+    this.sky.material.uniforms.rayleigh.value = 0.45 + 1.6*day + 1.4*low*day;
     this.moonSprite.position.copy(focus).addScaledVector(this.sunDir, -3600); this.moonSprite.material.opacity = (this.sunDir.y < 0.02 ? 1 : 0)*smooth(0.35, 0.9, night);
     this.sky.position.copy(focus);
+    if (this.explore) { if (!this.exSky) this._buildExSky(); this.exSky.visible = true; this.sky.visible = false; this.exSky.position.copy(focus); this._exSkyUpdate(se, night); } else if (this.exSky && this.exSky.visible) { this.exSky.visible = false; this.sky.visible = true; }
   }
 }
