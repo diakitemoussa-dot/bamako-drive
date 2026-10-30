@@ -206,6 +206,7 @@ const bamakoHours = () => { const d = new Date(); return d.getUTCHours() + d.get
 const modeOfHours = h => h >= 6.2 && h < 17 ? 'jour' : (h >= 17 && h < 19.3) || (h >= 5.3 && h < 6.2) ? 'soir' : 'nuit';
 const hhmm = h => String(Math.floor(h) % 24).padStart(2, '0') + ':' + String(Math.floor((h % 1)*60)).padStart(2, '0');
 function showView(v) {
+  if (typeof PAD !== 'undefined' && PAD.cur) padSetFocus(null);
   $('menu').dataset.view = v; if (garage) { if (v === 'garage') { garage.start(); garageFill(); } else garage.stop(); } if (v === 'moment') momentFill(); if (v === 'depart') recapFill();
 }
 function garageFill() {
@@ -260,6 +261,45 @@ function setupFlow() {
     else if (v === 'depart') { if (e.code === 'Escape') showView('moment'); }
   });
 }
+
+// ---------------- manette dans les menus : croix directionnelle = se déplacer, X (ou A / ✕) = valider, B = retour ----------------
+const PAD = { prev: {}, cur: null };
+const padVisible = el => !!el && el.getClientRects().length > 0;
+function padContainer() {
+  if ($('nameGate')) return null;
+  if (!$('pause').classList.contains('hidden')) return $('pause');
+  if (!$('menu').classList.contains('hidden')) return { home: $('vHome'), garage: $('vGarage'), moment: $('vMoment'), depart: $('vDepart') }[$('menu').dataset.view] || null;
+  return null;
+}
+function padSetFocus(el) { if (PAD.cur) PAD.cur.classList.remove('padFocus'); PAD.cur = el; if (el) { el.classList.add('padFocus'); if (el.scrollIntoView) el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } }
+function padMove(box, dir) {
+  const items = [...box.querySelectorAll('button:not(:disabled), input[type=checkbox], input[type=range]')].filter(padVisible);
+  if (!items.length) return;
+  if (!PAD.cur || !items.includes(PAD.cur)) { const pref = ['play', 'resume', 'go', 'gOk'].map(id => items.find(e => e.id === id)).find(Boolean) || items.find(e => e.classList.contains('on')) || items[0]; padSetFocus(pref); return; }
+  const r0 = PAD.cur.getBoundingClientRect(), cx = r0.left + r0.width/2, cy = r0.top + r0.height/2; let best = null, bs = 1e9;
+  for (const e of items) { if (e === PAD.cur) continue; const r = e.getBoundingClientRect(), dx = r.left + r.width/2 - cx, dy = r.top + r.height/2 - cy;
+    const ok = dir === 'left' ? dx < -4 : dir === 'right' ? dx > 4 : dir === 'up' ? dy < -4 : dy > 4; if (!ok) continue;
+    const sc = (dir === 'left' || dir === 'right') ? Math.abs(dx) + 2.5*Math.abs(dy) : Math.abs(dy) + 2.5*Math.abs(dx); if (sc < bs) { bs = sc; best = e; } }
+  if (best) padSetFocus(best);
+}
+function padMenu() {
+  const gp = navigator.getGamepads && [...navigator.getGamepads()].find(g => g && g.connected); if (!gp) return;
+  const edge = i => { const d = !!(gp.buttons[i] && gp.buttons[i].pressed), e = d && !PAD.prev[i]; PAD.prev[i] = d; return e; };
+  const up = edge(12), down = edge(13), left = edge(14), right = edge(15), a0 = edge(0), a2 = edge(2), ok = a0 || a2, back = edge(1);
+  const start = edge(9); if (start && state.running) { pause(!state.paused); return; }   // Start = pause / reprise
+  if (EX.on) { if (back) $('exQuit').click(); return; }
+  const box = padContainer(); if (!box) { if (PAD.cur) padSetFocus(null); return; }
+  if (!(up || down || left || right || ok || back)) return;
+  if (box.id === 'vGarage') {                                        // garage : gauche / droite = véhicule précédent / suivant (ou pastilles de couleur si elles sont sélectionnées)
+    const sw = PAD.cur && PAD.cur.parentElement && PAD.cur.parentElement.id === 'gSwatch';
+    if ((left || right) && !sw) { garageStep(left ? -1 : 1); return; }
+    if ((left || right) && sw) { padMove(box, left ? 'left' : 'right'); return; }
+  }
+  if (ok) { if (PAD.cur && padVisible(PAD.cur) && box.contains(PAD.cur)) PAD.cur.click(); else padMove(box, 'down'); return; }
+  if (back) { const b = box.id === 'pause' ? $('resume') : [...box.querySelectorAll('.back')].find(padVisible); if (b) b.click(); return; }
+  padMove(box, up ? 'up' : down ? 'down' : left ? 'left' : 'right');
+}
+addEventListener('pointerdown', () => { if (PAD.cur) padSetFocus(null); }, true);
 function buildMenu() {
   setupFlow();
   const pl = $('placeList'); PLACES.forEach((p, i) => { const b = document.createElement('button'); b.textContent = p.name; if (i === sel.place) b.classList.add('on'); b.onclick = () => { sel.place = i; [...pl.children].forEach(c => c.classList.toggle('on', c === b)); }; pl.appendChild(b); });
@@ -276,7 +316,7 @@ async function applyQuality(p) { prof = p; createRenderer(); const keep = { hour
 
 let last = performance.now(), fpsT = 0;
 function frame(now) {
-  requestAnimationFrame(frame); let dt = Math.min((now - last)/1000, 0.06); last = now; if (!world) return; if (garage && garage.on) garage.frame(dt);
+  requestAnimationFrame(frame); let dt = Math.min((now - last)/1000, 0.06); last = now; if (!world) return; padMenu(); if (garage && garage.on) garage.frame(dt);
   shared.uTime.value = now/1000;
   if (state.running && !state.paused) {
     const e = input.takeEdges(); if (e.pause) pause(true); if (e.cam) state.cam = (state.cam + 1) % 3; if (e.lights) { state.lights = state.lights === null ? !(atmo.night > 0.35) : !state.lights; toast(state.lights ? 'Phares allumés' : 'Phares éteints', '', 1.2); } if (e.reset) { const sp = startPosNear(); player.reset(sp.x, sp.z, sp.yaw); toast('Remis sur la route', '', 1.4); } if (e.time) { const order = ['jour', 'soir', 'nuit']; const cur = atmo.elev > 0.2 ? 0 : atmo.elev > -0.08 ? 1 : 2; atmo.setPreset(order[(cur + 1) % 3]); toast('Moment : ' + order[(cur + 1) % 3], '', 1.4); }
