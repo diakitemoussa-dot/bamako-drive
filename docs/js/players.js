@@ -1,12 +1,12 @@
 // Comptage des joueurs : un nom demandé une seule fois par appareil, puis +1 à chaque ouverture du jeu (une fois par session).
-// Les données vont dans la base Notion « Bamako Drive — Joueurs » via le relais Cloudflare (la clé Notion n'est jamais dans le jeu).
-export const PLAYERS_API = '';   // ex. 'https://bamako-drive-joueurs.TON-COMPTE.workers.dev' ; vide = fonction désactivée
+// Les données vont dans un tableur Google (onglet « Joueurs ») via un script Google Apps Script (voir apps_script/).
+export const PLAYERS_API = '';   // URL de l'application Web Apps Script (…/exec) ; vide = fonction désactivée
 
 const KEY = 'bd_player', SESSION = 'bd_counted';
 const store = { get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } }, set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch {} } };
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
 const device = () => { const u = navigator.userAgent; return (/iPhone|iPad/.test(u) ? 'iOS' : /Android/.test(u) ? 'Android' : /Windows/.test(u) ? 'Windows' : /Mac/.test(u) ? 'Mac' : 'Autre') + ' · ' + (matchMedia('(pointer:coarse)').matches ? 'tactile' : 'souris'); };
-const call = (path, body) => fetch(PLAYERS_API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, device: device() }) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+const call = (path, body) => fetch(PLAYERS_API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...body, action: path.slice(1), device: device() }) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(j => { if (j.error) throw new Error(j.error); return j; });   // text/plain : requête « simple », sans pré-vérification CORS (Google Apps Script)
 
 /** à appeler une fois le jeu prêt : demande le nom si besoin, puis compte l'entrée. Ne bloque jamais le jeu. */
 export async function startPlayers() {

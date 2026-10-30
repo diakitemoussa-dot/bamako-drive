@@ -1,0 +1,13 @@
+COMPTAGE DES JOUEURS avec Google Sheets (aucun compte supplémentaire)
+
+1. Va sur https://sheets.new : un tableur vide s'ouvre. Nomme-le « Bamako Drive - Joueurs ».
+2. Menu Extensions > Apps Script. Supprime le code présent, colle tout le contenu de Code.gs, enregistre (icône disquette).
+3. Clique sur Déployer > Nouveau déploiement. Type (roue dentée) : Application Web.
+     Exécuter en tant que : Moi
+     Qui a accès : Tout le monde
+   Clique sur Déployer, accepte les autorisations (Google affiche « application non vérifiée » : Avancé > Accéder à ... ).
+4. Copie l'URL de l'application Web (elle finit par /exec). Ouvre-la dans le navigateur : elle doit afficher {"ok":true}.
+5. Donne-moi cette URL : je la mets dans js/players.js (PLAYERS_API).
+
+Dans le tableur, l'onglet « Joueurs » se remplit tout seul : Nom, ID appareil, Nombre de fois, Première visite, Dernière visite, Appareil.
+Si tu modifies Code.gs plus tard : Déployer > Gérer les déploiements > modifier > Nouvelle version.
