@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { World, shared } from './world.js';
 import { Atmosphere, PRESETS } from './sky.js';
-import { Models, KINDS, NAMES } from './vehicles.js';
+import { Models, KINDS, NAMES, PHYS } from './vehicles.js';
+import { Garage } from './garage.js';
 import { Player } from './player.js';
 import { Input } from './input.js';
 import { Graph } from './graph.js';
@@ -16,7 +17,8 @@ const PLACES = [
   { name: 'Monument de la Paix', x: -843.6, z: 853.8 }, { name: 'Grand Marché', x: 656, z: -586 }, { name: 'Monument de l\'Indépendance', x: -183, z: 212 }, { name: 'Ecobank (Ave de la Nation)', x: -251, z: 337 },
   { name: 'Tour BCEAO', x: 510, z: 705 }, { name: 'Cathédrale', x: 377, z: -520 }, { name: 'Grande Mosquée', x: 1058, z: -880 }, { name: 'Stade Modibo Keïta', x: 1059, z: -2342 }];
 const LANDMARKS = [...PLACES, { name: 'Palais de la Culture', x: 1315, z: 1636 }, { name: 'Azalaï Hôtel', x: -523, z: 1091 }, { name: 'Radisson Collection', x: -1263, z: 1077 }, { name: 'Cité Administrative', x: -768, z: 1170 }, { name: 'Hôtel de l\'Amitié', x: 1034, z: 86 }, { name: 'Hôtel Libya', x: 1060, z: 511 }, { name: 'Gare de Bamako', x: 437, z: -1040 }, { name: 'CHU Gabriel Touré', x: 660, z: -1353 }, { name: 'Musée National', x: 378, z: -2172 }, { name: 'Assemblée Nationale', x: 1016, z: -1046 }, { name: 'Mémorial Modibo Keïta', x: -662, z: 911 }];
-const sel = { car: 'taxi', place: 0, time: 'jour', traffic: 0.7, quality: 'auto' };
+const sel = { car: 'taxi', ci: 0, place: 0, time: 'reel', traffic: 0.7, quality: 'auto' };
+let garage = null;
 const state = { running: false, paused: false, cam: 0, lights: null, hornT: 0, score: 100, toast: 0, ready: false, flying: false };
 
 // ---------------- renderer / scene ----------------
@@ -166,9 +168,9 @@ async function begin() {
   const sp = startPos(); world.update(sp.x, sp.z, true);
   await new Promise(res => { const t0 = performance.now(); const chk = () => { const loaded = world.tiles.size, want = Math.min(4, world.index.size); if ((world.tileAt(sp.x, sp.z) && world.loading.size === 0) || performance.now() - t0 > 12000) res(); else setTimeout(chk, 80); }; chk(); });
   if (player) { scene.remove(player.car.root); }
-  const color = models.kinds[sel.car].colors[0]; const g = world.ground(sp.x, sp.z, null) ?? 20; player = new Player(models, world, sel.car, color, { x: sp.x, y: g, z: sp.z }, sp.yaw); scene.add(player.car.root); player.onCrash = (v) => { shake = Math.min(0.6, v*0.04); sound.crash(v); penalty(Math.min(8, Math.round(v*0.6)), 'Collision'); };
+  const cols = models.kinds[sel.car].colors, color = cols[sel.ci % cols.length]; const g = world.ground(sp.x, sp.z, null) ?? 20; player = new Player(models, world, sel.car, color, { x: sp.x, y: g, z: sp.z }, sp.yaw); scene.add(player.car.root); player.onCrash = (v) => { shake = Math.min(0.6, v*0.04); sound.crash(v); penalty(Math.min(8, Math.round(v*0.6)), 'Collision'); };
   player.car.setPose(sp.x, g, sp.z, sp.yaw, 0, 0); camPos.set(sp.x - Math.cos(sp.yaw)*8, g + 4, sp.z - Math.sin(sp.yaw)*8); camLook.set(sp.x, g + 1, sp.z); camYaw = sp.yaw;
-  if (sel.time === 'auto') { atmo.hours = 9.5; atmo.auto = true; } else { atmo.setPreset(sel.time); }
+  if (sel.time === 'auto') { atmo.hours = 9.5; atmo.auto = true; } else if (sel.time === 'reel') { atmo.hours = bamakoHours(); atmo.auto = false; } else { atmo.setPreset(sel.time); }
   atmo.update(0, new THREE.Vector3(sp.x, g, sp.z)); state.lights = null; state.score = 100; $('scoreVal').textContent = 100;
   if (traffic) traffic.start(sp, sel.traffic, player);
   $('menu').classList.add('hidden'); $('backGame').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); input.calibrateTilt(); sound.start(); toast('Bonne route !', 'good', 2.5);
@@ -183,14 +185,75 @@ function goFullscreen() {   // phones: fill the screen and lock landscape (when 
   try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (e) {}
 }
 function pause(on) { if (!state.running) return; if (BM.open) closeMap(); state.paused = on; $('pause').classList.toggle('hidden', !on); if (on) { sound.horn(false); input.keys.clear(); const T = input.touch; T.gas = T.brake = 0; T.hand = false; T.steer = 0; T.active = false; input.ptr.clear(); } }
-function toMenu() { pause(false); state.running = false; $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('menu').classList.remove('hidden'); if (player) $('backGame').classList.remove('hidden'); sound.horn(false); }
-function backToGame() { if (!player) return; $('menu').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); }
+function toMenu() { pause(false); state.running = false; $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('menu').classList.remove('hidden'); showView('home'); if (player) $('backGame').classList.remove('hidden'); sound.horn(false); }
+function backToGame() { if (!player) return; showView('home'); $('menu').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); }
+
+// ---------------- parcours : accueil → garage → moment → départ ----------------
+const BLURB = { taxi: 'Le jaune de Bamako, partout, tout le temps.', sedan: 'Confortable et stable sur les grands boulevards.', suv: 'Haut sur roues, il passe partout.', pickup: 'Une grande benne pour tout transporter.', sotrama: 'Le minibus vert, toujours plein de monde.', truck: 'Lent, lourd, impressionnant.', moto: 'Agile, parfaite pour se faufiler dans la ville.', tricycle: 'Le petit utilitaire des quartiers.' };
+const bamakoHours = () => { const d = new Date(); return d.getUTCHours() + d.getUTCMinutes()/60; };           // Bamako = UTC+0, toute l'année
+const modeOfHours = h => h >= 6.2 && h < 17 ? 'jour' : (h >= 17 && h < 19.3) || (h >= 5.3 && h < 6.2) ? 'soir' : 'nuit';
+const hhmm = h => String(Math.floor(h) % 24).padStart(2, '0') + ':' + String(Math.floor((h % 1)*60)).padStart(2, '0');
+function showView(v) {
+  $('menu').dataset.view = v; if (garage) { if (v === 'garage') { garage.start(); garageFill(); } else garage.stop(); } if (v === 'moment') momentFill(); if (v === 'depart') recapFill();
+}
+function garageFill() {
+  const k = sel.car, i = KINDS.indexOf(k), P = PHYS[k], cols = models.kinds[k].colors; garage.show(k, sel.ci);
+  $('gCount').textContent = (i + 1) + ' / ' + KINDS.length; $('gName').textContent = NAMES[k]; $('gBlurb').textContent = BLURB[k];
+  const pc = (v, lo, hi) => Math.round(100*Math.max(0.08, Math.min(1, (v - lo)/(hi - lo))));
+  const st = [['Vitesse', pc(P.vmax, 15, 52)], ['Maniabilité', Math.round((pc(P.steer, 0.45, 0.62) + pc(P.a0, 1.5, 8))/2)], ['Gabarit', pc(Math.log(P.mass), Math.log(150), Math.log(7500))]];
+  $('gStats').innerHTML = st.map(([n, v]) => '<div><span>' + n + '</span><div class="bar"><i style="width:' + v + '%"></i></div></div>').join('');
+  $('gDots').innerHTML = KINDS.map((_, j) => '<i class="' + (j === i ? 'on' : '') + '"></i>').join('');
+  const sw = $('gSwatch'); sw.innerHTML = ''; cols.forEach((c, j) => { const b = document.createElement('button'); b.style.background = 'rgb(' + c.map(x => Math.round(Math.pow(x, 1/2.2)*255)).join(',') + ')'; b.setAttribute('aria-label', 'Couleur ' + (j + 1)); if (j === sel.ci % cols.length) b.classList.add('on'); b.onclick = () => { sel.ci = j; garageFill(); }; sw.appendChild(b); }); sw.style.display = cols.length > 1 ? 'flex' : 'none';
+}
+function garageStep(d) { const i = (KINDS.indexOf(sel.car) + d + KINDS.length) % KINDS.length; sel.car = KINDS[i]; sel.ci = 0; garageFill(); }
+const MOMENTS = [
+  { t: 'reel', name: 'Comme à Bamako maintenant', sub: () => 'Il est ' + hhmm(bamakoHours()) + ' à Bamako : ' + { jour: 'plein jour', soir: 'le soir tombe', nuit: 'il fait nuit' }[modeOfHours(bamakoHours())] + '. La ville est comme dehors.', tag: true },
+  { t: 'jour', name: 'Jour', sub: () => 'Plein soleil, ombres nettes, circulation dense.' },
+  { t: 'soir', name: 'Soir', sub: () => 'Coucher de soleil, lampadaires qui s’allument, chauves-souris.' },
+  { t: 'nuit', name: 'Nuit', sub: () => 'Phares, vitrines éclairées, balises rouges, étoiles.' },
+  { t: 'auto', name: 'Cycle automatique', sub: () => 'Le temps passe : tu vois le jour se coucher puis la nuit.' }];
+const SKY = {
+  jour: { top: '#86ADD4', bot: '#F4E0BD', b1: '#C9A68C', b2: '#A98269', gr: '#BE8A62', sx: 540, sy: 130, sun: 1, moon: 0, star: 0, win: 0, bat: 0, tail: 0, p: 'Jour', k: ['Ombres nettes', 'Trafic maximal'] },
+  soir: { top: '#55415D', bot: '#EE9A5A', b1: '#7A5C6C', b2: '#6A4F63', gr: '#8C5E4E', sx: 420, sy: 330, sun: .95, moon: 0, star: .25, win: .55, bat: 1, tail: .9, p: 'Soir', k: ['Lampadaires allumés', 'Chauves-souris'] },
+  nuit: { top: '#14102A', bot: '#3B2C5A', b1: '#2E2640', b2: '#262036', gr: '#2D2530', sx: 540, sy: 130, sun: 0, moon: 1, star: 1, win: 1, bat: 1, tail: 1, p: 'Nuit', k: ['Phares et vitrines', 'Balises rouges'] } };
+function momentFill() {
+  const box = $('mOpts'); box.innerHTML = '';
+  MOMENTS.forEach(m => { const b = document.createElement('button'); b.className = 'opt' + (sel.time === m.t ? ' on' : ''); b.innerHTML = '<b>' + m.name + (m.tag ? '<em>Conseillé</em>' : '') + '</b><span>' + m.sub() + '</span>'; b.onclick = () => { sel.time = m.t; momentFill(); }; box.appendChild(b); });
+  const mode = sel.time === 'reel' ? modeOfHours(bamakoHours()) : sel.time === 'auto' ? 'soir' : sel.time, P = SKY[mode];
+  const clock = sel.time === 'reel' ? hhmm(bamakoHours()) : sel.time === 'auto' ? '17:10' : { jour: '12:00', soir: '18:30', nuit: '22:00' }[mode];
+  const c = models.kinds[sel.car].colors[sel.ci % models.kinds[sel.car].colors.length], rgb = 'rgb(' + c.map(x => Math.round(Math.pow(x, 1/2.2)*255)).join(',') + ')';
+  const win = [[46, 320], [70, 350], [146, 300], [170, 340], [540, 320], [570, 360], [636, 350], [232, 360], [440, 330]].map(([x, y]) => '<rect x="' + x + '" y="' + y + '" width="10" height="12"/>').join('');
+  $('mPrev').innerHTML = '<svg viewBox="0 0 700 600" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="skg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + P.top + '"/><stop offset=".72" stop-color="' + P.bot + '"/></linearGradient><radialGradient id="gl"><stop offset="0" stop-color="#FFE6A8" stop-opacity=".95"/><stop offset="1" stop-color="#FFE6A8" stop-opacity="0"/></radialGradient></defs>'
+    + '<rect width="700" height="600" fill="url(#skg)"/><g fill="#fff" opacity="' + P.star + '"><circle cx="90" cy="70" r="2"/><circle cx="210" cy="130" r="1.6"/><circle cx="330" cy="50" r="2"/><circle cx="470" cy="110" r="1.6"/><circle cx="600" cy="60" r="2.2"/><circle cx="150" cy="190" r="1.5"/></g>'
+    + '<circle cx="' + P.sx + '" cy="' + P.sy + '" r="120" fill="url(#gl)" opacity="' + P.sun + '"/><circle cx="' + P.sx + '" cy="' + P.sy + '" r="42" fill="#FFF3CF" opacity="' + P.sun + '"/><circle cx="560" cy="120" r="34" fill="#F4EEDD" opacity="' + P.moon + '"/><circle cx="574" cy="112" r="30" fill="' + P.top + '" opacity="' + P.moon + '"/>'
+    + '<g fill="' + P.b1 + '"><rect x="30" y="300" width="80" height="170"/><rect x="130" y="270" width="64" height="200"/><rect x="520" y="290" width="90" height="180"/><rect x="620" y="320" width="70" height="150"/></g><g fill="' + P.b2 + '"><rect x="210" y="330" width="110" height="140"/><rect x="420" y="300" width="80" height="170"/></g><g fill="#FFD983" opacity="' + P.win + '">' + win + '</g>'
+    + '<path d="M330 470 L350 270 L370 470 M350 270 V470" stroke="' + P.b1 + '" stroke-width="12" fill="none"/><rect y="470" width="700" height="130" fill="' + P.gr + '"/><polygon points="270,470 430,470 640,600 60,600" fill="#3F3A48"/><polygon points="346,478 354,478 372,600 328,600" fill="#F8F3EA" opacity=".8"/>'
+    + '<g opacity="' + P.win + '"><circle cx="150" cy="400" r="46" fill="#FFE6A8" opacity=".35"/><circle cx="550" cy="400" r="46" fill="#FFE6A8" opacity=".35"/></g><path d="M150 470 V392 H168 M550 470 V392 H532" stroke="#2B2030" stroke-width="5" fill="none"/>'
+    + '<g opacity="' + P.bat + '" fill="#2B2233"><path d="M120 120 q10 -12 20 0 q10 -12 20 0 q-10 4 -20 10 q-10 -6 -20 -10z"/><path d="M420 80 q8 -10 16 0 q8 -10 16 0 q-8 3 -16 8 q-8 -5 -16 -8z"/><path d="M270 170 q8 -10 16 0 q8 -10 16 0 q-8 3 -16 8 q-8 -5 -16 -8z"/></g>'
+    + '<g transform="translate(250 506)"><rect width="200" height="80" rx="22" fill="' + rgb + '" stroke="#2B2030" stroke-width="3"/><rect x="26" y="12" width="140" height="30" rx="10" fill="#4C5E73"/><rect x="10" y="52" width="26" height="12" rx="4" fill="#C23B35" opacity="' + P.tail + '"/><rect x="164" y="52" width="26" height="12" rx="4" fill="#C23B35" opacity="' + P.tail + '"/></g></svg>'
+    + '<div class="mClock"><b>' + clock + '</b><small>' + (sel.time === 'auto' ? 'Le temps s’écoule' : P.p) + '</small></div><div class="mPerks"><span>' + P.k[0] + '</span><span>' + P.k[1] + '</span></div>';
+}
+function recapFill() {
+  const m = MOMENTS.find(x => x.t === sel.time); $('recap').innerHTML = '<b>' + NAMES[sel.car] + '</b><b>' + (sel.time === 'reel' ? 'Bamako maintenant' : m.name) + '</b><button data-go="garage">Modifier</button>';
+}
+function setupFlow() {
+  garage = new Garage($('garageCv'), models);
+  document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => showView(b.dataset.go)); $('recap').onclick = e => { const b = e.target.closest('button'); if (b) showView(b.dataset.go); };
+  $('gPrev').onclick = () => garageStep(-1); $('gNext').onclick = () => garageStep(1); $('gOk').onclick = () => showView('moment'); $('mOk').onclick = () => showView('depart');
+  window.addEventListener('keydown', e => {
+    if ($('menu').classList.contains('hidden')) return; const v = $('menu').dataset.view;
+    if (v === 'garage') { if (e.code === 'ArrowLeft') garageStep(-1); else if (e.code === 'ArrowRight') garageStep(1); else if (e.code === 'Enter') showView('moment'); else if (e.code === 'Escape') showView('home'); }
+    else if (v === 'moment') { if (e.code === 'Enter') showView('depart'); else if (e.code === 'Escape') showView('garage'); }
+    else if (v === 'depart') { if (e.code === 'Escape') showView('moment'); }
+  });
+}
 function buildMenu() {
-  const carList = $('carList'); KINDS.forEach(k => { const b = document.createElement('button'); b.textContent = NAMES[k]; b.dataset.k = k; if (k === sel.car) b.classList.add('on'); b.onclick = () => { sel.car = k; [...carList.children].forEach(c => c.classList.toggle('on', c === b)); }; carList.appendChild(b); });
+  setupFlow();
   const pl = $('placeList'); PLACES.forEach((p, i) => { const b = document.createElement('button'); b.textContent = p.name; if (i === sel.place) b.classList.add('on'); b.onclick = () => { sel.place = i; [...pl.children].forEach(c => c.classList.toggle('on', c === b)); }; pl.appendChild(b); });
   const chips = (id, key, attr, conv = v => v) => { const box = $(id); box.onclick = (e) => { const b = e.target.closest('button'); if (!b) return; sel[key] = conv(b.dataset[attr]); [...box.children].forEach(c => c.classList.toggle('on', c === b)); }; };
-  chips('timeList', 'time', 't'); chips('trafficList', 'traffic', 'v', parseFloat); chips('qualList', 'quality', 'q');
-  $('play').onclick = async () => { goFullscreen(); $('play').disabled = true; $('play').textContent = 'Chargement…'; if (sel.quality !== 'auto' && PROFILES[sel.quality] !== prof) await applyQuality(PROFILES[sel.quality]); await begin(); $('play').textContent = 'JOUER'; $('play').disabled = false; };
+  chips('trafficList', 'traffic', 'v', parseFloat); chips('qualList', 'quality', 'q');
+  $('play').onclick = () => { goFullscreen(); showView('garage'); };
+  $('go').onclick = async () => { goFullscreen(); $('go').disabled = true; $('go').textContent = 'Chargement…'; if (sel.quality !== 'auto' && PROFILES[sel.quality] !== prof) await applyQuality(PROFILES[sel.quality]); await begin(); $('go').textContent = "▶ C'EST PARTI"; $('go').disabled = false; };
   $('resume').onclick = () => { pause(false); input.calibrateTilt(); }; $('toMenu').onclick = toMenu; $('backGame').onclick = backToGame; $('hudPause').onclick = () => pause(!state.paused); $('hudMenu').onclick = () => { pause(true); };
   setupRadio(); $('exploreBtn').onclick = startExplore; setupExplore();
   $('fsBtn').onclick = () => { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el); };
@@ -200,7 +263,7 @@ async function applyQuality(p) { prof = p; createRenderer(); const keep = { hour
 
 let last = performance.now(), fpsT = 0;
 function frame(now) {
-  requestAnimationFrame(frame); let dt = Math.min((now - last)/1000, 0.06); last = now; if (!world) return;
+  requestAnimationFrame(frame); let dt = Math.min((now - last)/1000, 0.06); last = now; if (!world) return; if (garage && garage.on) garage.frame(dt);
   shared.uTime.value = now/1000;
   if (state.running && !state.paused) {
     const e = input.takeEdges(); if (e.pause) pause(true); if (e.cam) state.cam = (state.cam + 1) % 3; if (e.lights) { state.lights = state.lights === null ? !(atmo.night > 0.35) : !state.lights; toast(state.lights ? 'Phares allumés' : 'Phares éteints', '', 1.2); } if (e.reset) { const sp = startPosNear(); player.reset(sp.x, sp.z, sp.yaw); toast('Remis sur la route', '', 1.4); } if (e.time) { const order = ['jour', 'soir', 'nuit']; const cur = atmo.elev > 0.2 ? 0 : atmo.elev > -0.08 ? 1 : 2; atmo.setPreset(order[(cur + 1) % 3]); toast('Moment : ' + order[(cur + 1) % 3], '', 1.4); }
@@ -239,7 +302,7 @@ function setupExplore() {
   $('exQuit').onclick = () => stopExplore(); $('exIn').onclick = () => exZoom(0.7); $('exOut').onclick = () => exZoom(1/0.7); $('exL').onclick = () => exOrbit(-0.45, 0); $('exR').onclick = () => exOrbit(0.45, 0);
   $('exUp').onclick = () => exOrbit(0, 0.2); $('exDown').onclick = () => exOrbit(0, -0.2);
   $('exTime').onclick = () => { EX.timeIdx = (EX.timeIdx + 1) % 3; atmo.setPreset(EX_TIMES[EX.timeIdx][0]); $('exTime').textContent = EX_TIMES[EX.timeIdx][1]; };
-  $('exDrive').onclick = () => { if (EX.sel < 0) return; sel.place = EX.sel; document.querySelectorAll('#placeList button').forEach((b, i) => b.classList.toggle('on', i === sel.place)); stopExplore(true); $('play').click(); };
+  $('exDrive').onclick = () => { if (EX.sel < 0) return; sel.place = EX.sel; document.querySelectorAll('#placeList button').forEach((b, i) => b.classList.toggle('on', i === sel.place)); stopExplore(true); $('go').click(); };
 }
 const _off = new THREE.Vector3(), _sph = new THREE.Spherical();
 function exZoom(f) { if (!EX.ctl) return; _off.copy(camera.position).sub(EX.ctl.target); const d = Math.max(EX.ctl.minDistance, Math.min(EX.ctl.maxDistance, _off.length()*f)); camera.position.copy(EX.ctl.target).addScaledVector(_off.normalize(), d); }
@@ -247,7 +310,7 @@ function exOrbit(dTheta, dPhi) { if (!EX.ctl) return; _off.copy(camera.position)
 function exSelect(i) { EX.sel = i; const l = LANDMARKS[i]; EX.labels.forEach((o, k) => o.el.classList.toggle('on', k === i)); $('exName').textContent = l.name; $('exCard').classList.remove('hidden'); EX.fly = { x: l.x, z: l.z, d: Math.min(camera.position.distanceTo(EX.ctl.target), 420) }; }
 function startExplore() {
   if (!state.ready || EX.on) return; EX.on = true; state.running = false;
-  EX.saved = { r: prof.tileRadius, far: atmo.fog.far, hours: atmo.hours, auto: atmo.auto }; prof.tileRadius = prof === PROFILES.low ? 1000 : 1500; atmo.fog.far = 9000; atmo.auto = false; EX.timeIdx = sel.time === 'soir' ? 1 : sel.time === 'nuit' ? 2 : 0; atmo.setPreset(EX_TIMES[EX.timeIdx][0]); $('exTime').textContent = EX_TIMES[EX.timeIdx][1];
+  EX.saved = { r: prof.tileRadius, far: atmo.fog.far, hours: atmo.hours, auto: atmo.auto }; prof.tileRadius = prof === PROFILES.low ? 1000 : 1500; atmo.fog.far = 9000; atmo.auto = false; const tm = sel.time === 'reel' ? modeOfHours(bamakoHours()) : sel.time; EX.timeIdx = tm === 'soir' ? 1 : tm === 'nuit' ? 2 : 0; atmo.setPreset(EX_TIMES[EX.timeIdx][0]); $('exTime').textContent = EX_TIMES[EX.timeIdx][1];
   const pl = LANDMARKS[sel.place]; EX.tx = pl.x; EX.tz = pl.z; EX.dist = 1500; EX.pitch = 0.95; EX.sel = -1; EX.fly = null; $('exCard').classList.add('hidden'); EX.labels.forEach(l => l.el.classList.remove('on'));
   $('menu').classList.add('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('explore').classList.remove('hidden'); camera.far = 9000; camera.fov = 55; camera.updateProjectionMatrix(); world.update(EX.tx, EX.tz, true);
   // orbit camera: 1 finger / left mouse = rotate, 2 fingers = pinch zoom + pan, wheel = zoom, right mouse = pan

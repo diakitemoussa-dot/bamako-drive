@@ -38,23 +38,43 @@
 <div id="bigmap" class="hidden"><canvas id="bigmapCv"></canvas>
   <div id="bmBar"><button id="bmIn" aria-label="Zoom +">+</button><button id="bmOut" aria-label="Zoom -">−</button><button id="bmCenter" aria-label="Centrer sur moi">◎</button><button id="bmClose" aria-label="Fermer">✕</button></div>
   <div id="bmTitle">Carte de Bamako</div><div id="bmHint">Glisse pour déplacer · pince ou molette pour zoomer · touche M ou ✕ pour fermer</div></div>
-<div id="menu">
-  <div class="panel">
+<div id="menu" data-view="home">
+  <div class="view" id="vHome"><div class="panel">
     <h1>BAMAKO <span>DRIVE</span></h1>
     <p class="sub">Conduis dans la vraie ville de Bamako : taxis, sotramas, motos Jakarta, feux, piétons, du jour à la nuit.</p>
+    <button id="play" disabled>Chargement…</button>
     <button id="exploreBtn" disabled>🗺 Exploration de la ville en 3D</button>
     <button id="backGame" class="hidden">↩ Retour à la partie en cours</button>
-    <div class="row"><label>Véhicule</label><div id="carList" class="chips"></div></div>
-    <div class="row"><label>Départ</label><div id="placeList" class="chips"></div></div>
-    <div class="row"><label>Moment</label><div id="timeList" class="chips"><button data-t="jour" class="on">☀ Jour</button><button data-t="soir">🌇 Soir</button><button data-t="nuit">🌙 Nuit</button><button data-t="auto">⏱ Cycle</button></div></div>
-    <div class="row"><label>Trafic</label><div id="trafficList" class="chips"><button data-v="0.35">Calme</button><button data-v="0.7" class="on">Normal</button><button data-v="1">Dense</button></div></div>
-    <div class="row"><label>Qualité</label><div id="qualList" class="chips"><button data-q="auto" class="on">Auto</button><button data-q="low">Économe</button><button data-q="med">Moyenne</button><button data-q="high">Élevée</button></div></div>
-    <button id="play" disabled>Chargement…</button>
     <div id="loadBar"><i id="loadFill"></i></div><div id="loadTxt">Préparation de la ville…</div>
     <div class="help" id="helpPC"><b>Clavier :</b> ↑/W accélérer · ↓/S freiner/marche arrière · ←→/A D tourner · Espace frein à main · H klaxon · C caméra · L phares · T heure · R remettre sur la route · Échap ou P pause / reprise</div>
     <div class="help hidden" id="helpTouch"><b>Tactile :</b> glisse à gauche pour tourner · GAZ / FREIN à droite · boutons pour klaxon, caméra, phares. Tourne ton téléphone en mode paysage.</div>
-    <label class="check hidden" id="tiltRow"><input type="checkbox" id="tilt"> Utiliser mon téléphone comme volant (tourne-le comme un volant, en paysage)</label>
+  </div></div>
+
+  <div class="view" id="vGarage">
+    <canvas id="garageCv"></canvas>
+    <div class="gTop"><button class="back" data-go="home">‹ Accueil</button><div class="steps"><span class="on"><b>1</b>Véhicule</span><span><b>2</b>Moment</span><span><b>3</b>Départ</span></div><i></i></div>
+    <div class="gHead"><small id="gCount"></small><h2 id="gName"></h2><p id="gBlurb"></p></div>
+    <button class="gArrow l" id="gPrev" aria-label="Véhicule précédent">‹</button><button class="gArrow r" id="gNext" aria-label="Véhicule suivant">›</button>
+    <div class="gStats" id="gStats"></div>
+    <div class="gBottom"><div id="gSwatch"></div><div id="gDots"></div><button class="cta" id="gOk">✓ VALIDER · CHOISIR LE MOMENT</button><div class="gHint">Glisse pour faire tourner le véhicule · ← → pour changer · Entrée pour valider</div></div>
   </div>
+
+  <div class="view" id="vMoment">
+    <div class="gTop"><button class="back" data-go="garage">‹ Véhicule</button><div class="steps"><span class="done"><b>✓</b>Véhicule</span><span class="on"><b>2</b>Moment</span><span><b>3</b>Départ</span></div><i></i></div>
+    <div class="mWrap"><div id="mPrev"></div>
+      <div class="mSide"><small>Étape 2</small><h2>À quel moment tu conduis ?</h2><div id="mOpts"></div><button class="cta" id="mOk">✓ VALIDER · CHOISIR LE DÉPART</button></div></div>
+  </div>
+
+  <div class="view" id="vDepart"><div class="panel">
+    <div class="steps dark"><span class="done"><b>✓</b>Véhicule</span><span class="done"><b>✓</b>Moment</span><span class="on"><b>3</b>Départ</span></div>
+    <div id="recap"></div>
+    <div class="row"><label>Départ</label><div id="placeList" class="chips"></div></div>
+    <div class="row"><label>Trafic</label><div id="trafficList" class="chips"><button data-v="0.35">Calme</button><button data-v="0.7" class="on">Normal</button><button data-v="1">Dense</button></div></div>
+    <div class="row"><label>Qualité</label><div id="qualList" class="chips"><button data-q="auto" class="on">Auto</button><button data-q="low">Économe</button><button data-q="med">Moyenne</button><button data-q="high">Élevée</button></div></div>
+    <label class="check hidden" id="tiltRow"><input type="checkbox" id="tilt"> Utiliser mon téléphone comme volant (tourne-le comme un volant, en paysage)</label>
+    <button id="go" class="cta">▶ C'EST PARTI</button>
+    <button class="back wide" data-go="moment">‹ Retour</button>
+  </div></div>
 </div>
 <div id="pause" class="hidden"><div class="panel"><h2>Pause</h2><button id="resume">Reprendre</button><button id="toMenu">Menu : changer de véhicule / lieu</button><button id="fsBtn">Plein écran</button></div></div>
 <div id="explore" class="hidden">
