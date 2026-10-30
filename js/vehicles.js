@@ -40,5 +40,5 @@ export class CarMesh {
   }
   setPose(x, y, z, yaw, pitch, roll) { this.root.position.set(x, y, z); this.root.rotation.set(roll, -yaw, pitch); }
   setWheels(dist, steer) { for (const w of this.wheels) { w.g.rotation.set(0, w.front ? -steer : 0, 0); w.m.rotation.z = -dist/w.r; } }
-  setBrake(on, night) { this.rearMat.color.setRGB(on ? 1.0 : (0.28 + 0.45*night), on ? 0.05 : 0.02, 0.02); }
+  setBrake(on, night) { this.rearMat.color.setRGB(on ? 1.9 : (0.3 + 1.2*night), on ? 0.07 : 0.03, 0.02); }
 }

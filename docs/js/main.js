@@ -69,11 +69,19 @@ async function setupBeacons() {
   beaconLight = new THREE.PointLight(0xff2a18, 0, 70, 2); beaconLight.position.set(c[0], c[1] + 2, c[2]); scene.add(beaconLight);
 }
 function updateBeacons(now) { if (!beaconGlow) return; const k = atmo.dusk || 0, p = 0.8 + 0.5*Math.sin(now/1000*2.4); beaconGlow.visible = k > 0.01; beaconGlow.material.opacity = Math.min(1, k*p); beaconLight.intensity = 120*k*p; }
+const lightK = () => Math.max(atmo.night, (atmo.dusk || 0)*0.9);   // lumières (phares, feux, lampadaires) : allumées dès que le soleil est bas, pas seulement en pleine nuit
+let plRear = null;
+function setupPlayerRear() { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), r = g.createRadialGradient(32, 32, 1, 32, 32, 31); r.addColorStop(0, 'rgba(255,130,110,1)'); r.addColorStop(0.3, 'rgba(255,40,30,.75)'); r.addColorStop(1, 'rgba(255,20,10,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3)); plRear = new THREE.Points(geo, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(c), size: 2.2, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 })); plRear.frustumCulled = false; scene.add(plRear); }
 function updateNightLights(dt) {
-  const k = atmo.night; lampPool.material.opacity = 0.55*k; lampGlow.material.opacity = 0.9*k; lampPool.visible = lampGlow.visible = k > 0.02;
+  const k = lightK(); lampPool.material.opacity = 0.55*k; lampGlow.material.opacity = 0.9*k; lampPool.visible = lampGlow.visible = k > 0.02;
   const on = state.lights === null ? k > 0.35 : state.lights; player.car.front.material.color.setScalar(on ? 1.6 : 0.85);
   const f = [Math.cos(player.yaw), Math.sin(player.yaw)], r = [-f[1], f[0]];
   headSpots.forEach((s, i) => { const side = i ? 0.55 : -0.55; s.intensity = on ? 900*Math.max(k, 0.25)*(prof.shadows ? 1.2 : 1) : 0; s.position.set(player.x + f[0]*player.len*0.45 + r[0]*side, player.y + 0.75, player.z + f[1]*player.len*0.45 + r[1]*side); s.target.position.set(player.x + f[0]*28 + r[0]*side*1.5, player.y - 0.2, player.z + f[1]*28 + r[1]*side*1.5); });
+  if (!plRear || plRear.parent !== scene) { if (plRear && plRear.parent) plRear.parent.remove(plRear); plRear = null; setupPlayerRear(); }
+  { const hw = player.car.kind === 'moto' ? 0 : 0.6, fx = f[0]*(player.len*0.5 + 0.1), fz = f[1]*(player.len*0.5 + 0.1), p = plRear.geometry.attributes.position.array, y = player.y + (player.car.kind === 'truck' || player.car.kind === 'sotrama' ? 0.95 : 0.75);
+    p[0] = player.x - fx - r[0]*hw; p[1] = y; p[2] = player.z - fz - r[1]*hw; p[3] = player.x - fx + r[0]*hw; p[4] = y; p[5] = player.z - fz + r[1]*hw; plRear.geometry.setDrawRange(0, hw ? 2 : 1); plRear.geometry.attributes.position.needsUpdate = true;
+    plRear.material.opacity = Math.min(1, k*1.1 + (player.braking ? 0.7 : 0)); plRear.material.size = player.braking ? 3.4 : 2.2; plRear.visible = k > 0.03 || !!player.braking; }
   if (traffic) traffic.setNight(k);
 }
 
@@ -331,10 +339,10 @@ function frame(now) {
   requestAnimationFrame(frame); let dt = Math.min((now - last)/1000, 0.06); last = now; if (!world) return; if (garage && garage.on) garage.frame(dt);
   shared.uTime.value = now/1000;
   if (state.running && !state.paused) {
-    const e = input.takeEdges(); if (e.pause) pause(true); if (e.cam) state.cam = (state.cam + 1) % 3; if (e.lights) { state.lights = state.lights === null ? !(atmo.night > 0.35) : !state.lights; toast(state.lights ? 'Phares allumés' : 'Phares éteints', '', 1.2); } if (e.reset) { const sp = startPosNear(); player.reset(sp.x, sp.z, sp.yaw); toast('Remis sur la route', '', 1.4); } if (e.time) { const order = ['jour', 'soir', 'nuit']; const cur = atmo.elev > 0.2 ? 0 : atmo.elev > -0.08 ? 1 : 2; atmo.setPreset(order[(cur + 1) % 3]); toast('Moment : ' + order[(cur + 1) % 3], '', 1.4); }
-    const inp = input.poll(dt); player.world.night = atmo.night; player.update(dt, inp, traffic); world.update(player.x, player.z); player.hornT = inp.horn ? 1 : 0;
+    const e = input.takeEdges(); if (e.pause) pause(true); if (e.cam) state.cam = (state.cam + 1) % 3; if (e.lights) { state.lights = state.lights === null ? !(lightK() > 0.35) : !state.lights; toast(state.lights ? 'Phares allumés' : 'Phares éteints', '', 1.2); } if (e.reset) { const sp = startPosNear(); player.reset(sp.x, sp.z, sp.yaw); toast('Remis sur la route', '', 1.4); } if (e.time) { const order = ['jour', 'soir', 'nuit']; const cur = atmo.elev > 0.2 ? 0 : atmo.elev > -0.08 ? 1 : 2; atmo.setPreset(order[(cur + 1) % 3]); toast('Moment : ' + order[(cur + 1) % 3], '', 1.4); }
+    const inp = input.poll(dt); player.world.night = lightK(); player.update(dt, inp, traffic); world.update(player.x, player.z); player.hornT = inp.horn ? 1 : 0;
     const horn = e.horn || input.keys.has('KeyH'); sound.horn(horn); if (horn) state.honk = 1;
-    atmo.update(dt, camera.position.lengthSq() ? camera.position : player.car.root.position); updateNightLights(dt); updateCamera(dt); if (traffic) traffic.update(dt, atmo.night, camera); updateHud(dt);
+    atmo.update(dt, camera.position.lengthSq() ? camera.position : player.car.root.position); updateNightLights(dt); updateCamera(dt); if (traffic) traffic.update(dt, lightK(), camera); updateHud(dt);
     sound.update(player.speed, player.rpm, inp.throttle, player.drift, atmo.night); atmo.shadowR = prof.shadowR; shadowAt(player.car.root.position);
   } else if (EX.on) { exploreFrame(dt);
   } else if (!state.running && world) { // menu: slow orbit above the city

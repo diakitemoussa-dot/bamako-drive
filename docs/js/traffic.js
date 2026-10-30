@@ -133,13 +133,16 @@ export class Traffic {
     // halos de phares (nuit) : un point lumineux additif par phare, positionné chaque image devant les véhicules affichés
     { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d'), r = g.createRadialGradient(32, 32, 1, 32, 32, 31); r.addColorStop(0, 'rgba(255,248,225,1)'); r.addColorStop(0.25, 'rgba(255,236,190,.65)'); r.addColorStop(1, 'rgba(255,220,150,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64);
       const geo = new THREE.BufferGeometry(); this.hlPos = new Float32Array(cap*2*3); geo.setAttribute('position', new THREE.BufferAttribute(this.hlPos, 3)); geo.setDrawRange(0, 0);
-      this.hl = new THREE.Points(geo, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(cv), size: 2.6, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 })); this.hl.frustumCulled = false; this.scene.add(this.hl); this.objs.push(this.hl); }
+      this.hl = new THREE.Points(geo, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(cv), size: 2.6, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 })); this.hl.frustumCulled = false; this.scene.add(this.hl); this.objs.push(this.hl);
+      const cr = document.createElement('canvas'); cr.width = cr.height = 64; const gr = cr.getContext('2d'), rr = gr.createRadialGradient(32, 32, 1, 32, 32, 31); rr.addColorStop(0, 'rgba(255,120,100,1)'); rr.addColorStop(0.3, 'rgba(255,40,30,.7)'); rr.addColorStop(1, 'rgba(255,20,10,0)'); gr.fillStyle = rr; gr.fillRect(0, 0, 64, 64);
+      const geo2 = new THREE.BufferGeometry(); this.rlPos = new Float32Array(cap*2*3); geo2.setAttribute('position', new THREE.BufferAttribute(this.rlPos, 3)); geo2.setDrawRange(0, 0);
+      this.rl = new THREE.Points(geo2, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(cr), size: 1.7, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 })); this.rl.frustumCulled = false; this.scene.add(this.rl); this.objs.push(this.rl); }
     this.M4 = new THREE.Matrix4(); this.M5 = new THREE.Matrix4(); this.Q = new THREE.Quaternion(); this.E = new THREE.Euler(0, 0, 0, 'YXZ'); this.V = new THREE.Vector3(); this.S1 = new THREE.Vector3(1, 1, 1); this.C = new THREE.Color();
   }
-  setNight(k) { this.night = k; if (this.hl) this.hl.material.opacity = Math.min(1, k*1.15); const f = 0.9 + 0.9*k; for (const kn of KINDS) { const I = this.inst[kn]; if (I.front) I.front.material.color.setScalar(0.55 + 3.2*k); } }
+  setNight(k) { this.night = k; if (this.hl) this.hl.material.opacity = Math.min(1, k*1.15); if (this.rl) this.rl.material.opacity = Math.min(1, k*1.1); for (const kn of KINDS) { const I = this.inst[kn]; if (I && I.rearMat) I.rearMat.color.setRGB(0.3 + 1.3*k, 0.03 + 0.04*k, 0.02); } const f = 0.9 + 0.9*k; for (const kn of KINDS) { const I = this.inst[kn]; if (I.front) I.front.material.color.setScalar(0.55 + 3.2*k); } }
   update(dt, night, camera) {
     if (!this.on) return; this.step(Math.min(dt, 0.1)); this.cam = camera; const cx = this.player.x, cz = this.player.z, R2 = this.renderR*this.renderR;
-    this.S1.setScalar(this.scale || 1); for (const k of KINDS) this.inst[k].n = 0; let shown = 0; let hn = 0; const hlOn = this.night > 0.05 && this.hl; if (this.hl) this.hl.material.size = 2.6*(this.scale || 1);
+    this.S1.setScalar(this.scale || 1); for (const k of KINDS) this.inst[k].n = 0; let shown = 0; let hn = 0, rn = 0; const hlOn = this.night > 0.05 && this.hl; if (this.hl) this.hl.material.size = 2.6*(this.scale || 1); if (this.rl) this.rl.material.size = 1.7*(this.scale || 1);
     for (const ag of this.agents) {
       if (!ag.piece) continue; const dx = ag.x - cx, dz = ag.z - cz; if (dx*dx + dz*dz > R2) continue;
       const I = this.inst[ag.kind]; if (I.n >= this.cap) continue; const i = I.n++; shown++;
@@ -148,19 +151,21 @@ export class Traffic {
       const kap = (ag.piece.ang[Math.min(ag.i + 1, ag.piece.n - 1)] - ag.piece.ang[Math.max(ag.i - 1, 0)])/Math.max(ag.piece.cum[Math.min(ag.i + 1, ag.piece.n - 1)] - ag.piece.cum[Math.max(ag.i - 1, 0)], 1e-3);
       const st = ag.K.wb ? Math.max(-0.55, Math.min(0.55, Math.atan(ag.K.wb*kap))) : 0; ag.steer += (st - ag.steer)*Math.min(1, dt*8); const rl = ag.kind === 'moto' ? -Math.atan(ag.v*ag.v*kap/9.81)*0.85 : -Math.atan(ag.v*ag.v*kap/9.81)*0.1; ag.roll += (Math.max(-0.55, Math.min(0.55, rl)) - ag.roll)*Math.min(1, dt*6);
       this.E.set(ag.roll, -ag.ang, ag.pitch); this.Q.setFromEuler(this.E); this.V.set(ag.x, ag.y + 0.02, ag.z); this.M4.compose(this.V, this.Q, this.S1);
+      if (hlOn) { const hw2 = ag.kind === 'moto' ? 0 : 0.6*(this.scale || 1), bx = f[0]*(ag.len*0.5 + 0.12), bz = f[1]*(ag.len*0.5 + 0.12), n2 = hw2 ? 2 : 1; for (let q = 0; q < n2; q++) { const sd = hw2 ? (q ? hw2 : -hw2) : 0, o = rn++*3; this.rlPos[o] = ag.x - bx - f[1]*sd; this.rlPos[o + 1] = ag.y + (ag.kind === 'truck' || ag.kind === 'sotrama' ? 0.95 : 0.7); this.rlPos[o + 2] = ag.z - bz + f[0]*sd; } }
       if (hlOn) { const hw = ag.kind === 'moto' ? 0 : 0.55*(this.scale || 1), fx = f[0]*(ag.len*0.5 + 0.1), fz = f[1]*(ag.len*0.5 + 0.1), n = hw ? 2 : 1; for (let q = 0; q < n; q++) { const sd = hw ? (q ? hw : -hw) : 0, o = hn++*3; this.hlPos[o] = ag.x + fx - f[1]*sd; this.hlPos[o + 1] = ag.y + (ag.kind === 'truck' || ag.kind === 'sotrama' ? 0.9 : 0.65); this.hlPos[o + 2] = ag.z + fz + f[0]*sd; } }
       I.body.setMatrixAt(i, this.M4); I.detail.setMatrixAt(i, this.M4); if (I.front) I.front.setMatrixAt(i, this.M4); if (I.rear) I.rear.setMatrixAt(i, this.M4); if (I.sign) I.sign.setMatrixAt(i, this.M4);
       if (!ag.color) ag.color = ag.K.colors[(Math.random()*ag.K.colors.length) | 0]; I.body.instanceColor.setXYZ(i, ag.color[0], ag.color[1], ag.color[2]);
       const nw = ag.K.wheels.length; for (let w = 0; w < nw; w++) { const W = ag.K.wheels[w]; this.E.set(0, W.front && ag.kind !== 'moto' ? -ag.steer : 0, -ag.wang); this.Q.setFromEuler(this.E); this.V.set(W.x, W.y, W.z); this.M5.compose(this.V, this.Q, this.S1); this.M5.premultiply(this.M4); I.wheels.setMatrixAt(i*nw + w, this.M5); }
     }
     if (this.hl) { this.hl.geometry.setDrawRange(0, hn); this.hl.geometry.attributes.position.needsUpdate = true; }
+    if (this.rl) { this.rl.geometry.setDrawRange(0, rn); this.rl.geometry.attributes.position.needsUpdate = true; }
     for (const k of KINDS) { const I = this.inst[k], n = I.n, nw = this.models.kinds[k].wheels.length; for (const p of ['body', 'detail', 'front', 'rear', 'sign']) if (I[p]) { I[p].count = n; I[p].instanceMatrix.needsUpdate = true; } I.wheels.count = n*nw; I.wheels.instanceMatrix.needsUpdate = true; if (I.body.instanceColor) I.body.instanceColor.needsUpdate = true; }
     this.shown = shown; this._signals(dt); this._furniture(dt); this._renderPeds(dt);
   }
   /** Exploration 3D : la circulation suit le point regardé (focus = {x, z, y, len, vf, yaw}) ; les véhicules sont agrandis avec l'altitude pour rester visibles. */
   beginExplore(focus) { this._pl = this.player; this._dens = this.density; this.renderR = 700; this.scale = 1; this.start({ x: focus.x, z: focus.z }, this.density, focus); }
   endExplore(player) { this.renderR = 360; this.scale = 1; this.S1.setScalar(1); if (player) this.start({ x: player.x, z: player.z }, this._dens ?? this.density, player); else { this.on = false; this.hide(); } }
-  hide() { if (this.hl) this.hl.geometry.setDrawRange(0, 0); for (const k of KINDS) { const I = this.inst[k]; for (const p of ['body', 'detail', 'front', 'rear', 'sign', 'wheels']) if (I[p]) I[p].count = 0; I.n = 0; } }
+  hide() { if (this.hl) this.hl.geometry.setDrawRange(0, 0); if (this.rl) this.rl.geometry.setDrawRange(0, 0); for (const k of KINDS) { const I = this.inst[k]; for (const p of ['body', 'detail', 'front', 'rear', 'sign', 'wheels']) if (I[p]) I[p].count = 0; I.n = 0; } }
   nearPositions(R) { const out = [], cx = this.player.x, cz = this.player.z, R2 = R*R; for (const a of this.agents) if (a.piece && (a.x - cx)**2 + (a.z - cz)**2 < R2) out.push([a.x, a.z]); return out; }
   // ---------- player collisions ----------
   collidePlayer(p, dt) {
