@@ -81,7 +81,7 @@ function updateNightLights(dt) {
   if (!plRear || plRear.parent !== scene) { if (plRear && plRear.parent) plRear.parent.remove(plRear); plRear = null; setupPlayerRear(); }
   { const hw = player.car.kind === 'moto' ? 0 : 0.6, fx = f[0]*(player.len*0.5 + 0.1), fz = f[1]*(player.len*0.5 + 0.1), p = plRear.geometry.attributes.position.array, y = player.y + (player.car.kind === 'truck' || player.car.kind === 'sotrama' ? 0.95 : 0.75);
     p[0] = player.x - fx - r[0]*hw; p[1] = y; p[2] = player.z - fz - r[1]*hw; p[3] = player.x - fx + r[0]*hw; p[4] = y; p[5] = player.z - fz + r[1]*hw; plRear.geometry.setDrawRange(0, hw ? 2 : 1); plRear.geometry.attributes.position.needsUpdate = true;
-    plRear.material.opacity = Math.min(1, k*1.1 + (player.braking ? 0.7 : 0)); plRear.material.size = player.braking ? 3.4 : 2.2; plRear.visible = k > 0.03 || !!player.braking; }
+    const strong = !!player.braking || Math.abs(player.speed) < 0.6; plRear.material.opacity = Math.min(1, k*0.5 + (strong ? 0.5 : 0)); plRear.material.size = strong ? 2.7 : 1.6; plRear.visible = k > 0.03; }
   if (traffic) traffic.setNight(k);
 }
 

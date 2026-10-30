@@ -15,7 +15,7 @@ export class Player {
     for (let i = 0; i < n; i++) this._step(h, inp, traffic);
     this._pose(dt); this.car.setPose(this.x, this.y, this.z, this.yaw, this.pitch, this.roll); this.car.setWheels(this.dist, this.steer*(this.kind === 'moto' ? 0 : 1));
     this.car.parts.rotation.x = this.lean;    // moto leans into the corner
-    this.car.setBrake(this.braking, this.world.night || 0);
+    this.car.setBrake(this.braking || Math.abs(this.speed) < 0.6, this.world.night || 0);   // feux rouges forts : frein ou véhicule à l'arrêt
   }
   _surfaceMu() { return this.onRoad ? 1.0 : 0.72; }
   _step(dt, inp, traffic) {
