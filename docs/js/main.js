@@ -3,6 +3,7 @@ import { World, shared } from './world.js';
 import { Atmosphere, PRESETS } from './sky.js';
 import { Models, KINDS, NAMES, PHYS } from './vehicles.js';
 import { Garage } from './garage.js';
+import { startPlayers } from './players.js';
 import { Player } from './player.js';
 import { Input } from './input.js';
 import { Graph } from './graph.js';
@@ -342,7 +343,7 @@ function exploreFrame(dt) {
   prog(0.05, 'Chargement de la ville…'); await world.init(); prog(0.2, 'Chargement des véhicules…'); models = await new Models().load(); prog(0.4, 'Réseau routier…'); graph = await new Graph().load(); const river = await fetch('data/river.json').then(r => r.json()).catch(() => null); graph.renderMap(-2450, -2800, 4900, 5600, 5, river);
   prog(0.7, 'Circulation…'); try { const m = await import('./traffic.js'); traffic = new m.Traffic(scene, world, graph, models, prof); await traffic.init(); } catch (e) { console.warn('traffic unavailable', e); }
   bats = new Bats(scene, world, prof.bats || 150); setupBeacons();
-  buildMenu(); setupBigMap(); prog(1, 'Prêt'); $('play').disabled = false; $('exploreBtn').disabled = false; $('play').textContent = 'JOUER'; state.ready = true; requestAnimationFrame(frame); setTimeout(() => { $('splash').classList.add('out'); setTimeout(() => $('splash').remove(), 700); }, 900);
+  buildMenu(); setupBigMap(); prog(1, 'Prêt'); $('play').disabled = false; $('exploreBtn').disabled = false; $('play').textContent = 'JOUER'; state.ready = true; requestAnimationFrame(frame); setTimeout(() => { $('splash').classList.add('out'); setTimeout(() => $('splash').remove(), 700); startPlayers(); }, 900);
   window.__game = { get player() { return player; }, get atmo() { return atmo; }, get world() { return world; }, get traffic() { return traffic; }, get bats() { return bats; }, sel, state, begin, startExplore, stopExplore, EX, get camera() { return camera; } };
   if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

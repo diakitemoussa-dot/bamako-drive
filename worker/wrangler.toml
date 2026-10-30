@@ -1,0 +1,7 @@
+name = "bamako-drive-joueurs"
+main = "index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+DB_ID = "85a2040d-b52d-400d-adbd-57ecf981a26e"
+# NOTION_TOKEN : secret, ajouté avec « npx wrangler secret put NOTION_TOKEN » (jamais dans ce fichier)

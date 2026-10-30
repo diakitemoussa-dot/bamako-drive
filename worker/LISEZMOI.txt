@@ -1,0 +1,15 @@
+RELAIS DES JOUEURS (Cloudflare Worker -> base Notion « Bamako Drive — Joueurs »)
+
+1. Notion : va sur https://www.notion.so/profile/integrations, crée une intégration interne « Bamako Drive »
+   (type interne), copie son « Internal Integration Secret » (commence par ntn_ ou secret_).
+   Ouvre la base « Bamako Drive — Joueurs » > menu ••• > Connexions > ajoute « Bamako Drive ».
+2. Cloudflare : crée un compte gratuit sur https://dash.cloudflare.com.
+3. Dans ce dossier (worker/) :
+     npx wrangler login
+     npx wrangler secret put NOTION_TOKEN      (colle le secret Notion)
+     npx wrangler deploy
+   L'adresse affichée ressemble à https://bamako-drive-joueurs.TON-COMPTE.workers.dev
+4. Colle cette adresse dans js/players.js (PLAYERS_API), puis : node build.js, copie dist/ dans docs/, commit, push.
+
+Fonctionnement : le nom est demandé une seule fois par appareil ; ensuite « Nombre de fois » augmente de 1
+à chaque ouverture du jeu (une fois par session de navigateur).
