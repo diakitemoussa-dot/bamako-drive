@@ -5,7 +5,7 @@ import { Models, KINDS, NAMES, PHYS } from './vehicles.js';
 import { Garage } from './garage.js';
 import { startPlayers } from './players.js';
 import { Player } from './player.js';
-import { Input } from './input.js';
+import { Input, readPad } from './input.js';
 import { Graph } from './graph.js';
 import { PROFILES, detect, DynRes } from './quality.js';
 import { Sound } from './audio.js';
@@ -282,8 +282,15 @@ function padMove(box, dir) {
     const sc = (dir === 'left' || dir === 'right') ? Math.abs(dx) + 2.5*Math.abs(dy) : Math.abs(dy) + 2.5*Math.abs(dx); if (sc < bs) { bs = sc; best = e; } }
   if (best) padSetFocus(best);
 }
+
+// ---- détection de la manette : message à l'écran + mode diagnostic (ouvre le jeu avec ?pad=1)
+function padNote(msg) { let n = $('padNote'); if (!n) { n = document.createElement('div'); n.id = 'padNote'; document.body.appendChild(n); } n.textContent = msg; n.classList.add('show'); clearTimeout(padNote.t); padNote.t = setTimeout(() => n.classList.remove('show'), 3500); }
+addEventListener('gamepadconnected', e => padNote('🎮 Manette connectée : ' + (e.gamepad.id || '').slice(0, 40)));
+addEventListener('gamepaddisconnected', () => padNote('Manette déconnectée'));
+const PAD_DEBUG = new URLSearchParams(location.search).has('pad');
+function padDebug() { if (!PAD_DEBUG) return; let d = $('padDbg'); if (!d) { d = document.createElement('pre'); d.id = 'padDbg'; document.body.appendChild(d); } const gp = readPad(); d.textContent = gp ? 'id: ' + gp.id + '\nmapping: ' + (gp.mapping || '(vide)') + '\nboutons: ' + gp.buttons.map((b, i) => b.pressed ? i : '').filter(x => x !== '').join(' ') + '\naxes: ' + gp.axes.map(x => x.toFixed(2)).join(' ') : 'Aucune manette détectée.\nAppuie sur un bouton de la manette (le navigateur ne la voit qu’après un premier appui).'; }
 function padMenu() {
-  const gp = navigator.getGamepads && [...navigator.getGamepads()].find(g => g && g.connected); if (!gp) return;
+  const gp = readPad(); if (!gp) return;
   const edge = i => { const d = !!(gp.buttons[i] && gp.buttons[i].pressed), e = d && !PAD.prev[i]; PAD.prev[i] = d; return e; };
   const up = edge(12), down = edge(13), left = edge(14), right = edge(15), a0 = edge(0), a2 = edge(2), ok = a0 || a2, back = edge(1);
   const start = edge(9); if (start && state.running) { pause(!state.paused); return; }   // Start = pause / reprise
@@ -316,7 +323,7 @@ async function applyQuality(p) { prof = p; createRenderer(); const keep = { hour
 
 let last = performance.now(), fpsT = 0;
 function frame(now) {
-  requestAnimationFrame(frame); let dt = Math.min((now - last)/1000, 0.06); last = now; if (!world) return; padMenu(); if (garage && garage.on) garage.frame(dt);
+  requestAnimationFrame(frame); let dt = Math.min((now - last)/1000, 0.06); last = now; if (!world) return; padMenu(); padDebug(); if (garage && garage.on) garage.frame(dt);
   shared.uTime.value = now/1000;
   if (state.running && !state.paused) {
     const e = input.takeEdges(); if (e.pause) pause(true); if (e.cam) state.cam = (state.cam + 1) % 3; if (e.lights) { state.lights = state.lights === null ? !(atmo.night > 0.35) : !state.lights; toast(state.lights ? 'Phares allumés' : 'Phares éteints', '', 1.2); } if (e.reset) { const sp = startPosNear(); player.reset(sp.x, sp.z, sp.yaw); toast('Remis sur la route', '', 1.4); } if (e.time) { const order = ['jour', 'soir', 'nuit']; const cur = atmo.elev > 0.2 ? 0 : atmo.elev > -0.08 ? 1 : 2; atmo.setPreset(order[(cur + 1) % 3]); toast('Moment : ' + order[(cur + 1) % 3], '', 1.4); }

@@ -1,4 +1,17 @@
 // Inputs: keyboard, gamepad, touch (steering drag-zone + pedals + buttons) and optional tilt steering. Output: { steer -1..1 (right = +), throttle, brake, reverse, hand }.
+
+/** Première manette connectée, normalisée au format « standard » (boutons 0-3 faces, 6/7 gâchettes, 9 Start, 12-15 croix, axes 0-3 sticks).
+ *  Les manettes génériques (mapping vide : DirectInput, Switch, anciennes manettes…) envoient souvent la croix sur un axe « hat » : on la convertit en boutons 12-15. */
+export function readPad() {
+  const list = navigator.getGamepads ? [...navigator.getGamepads()] : []; const gp = list.find(g => g && g.connected); if (!gp) return null;
+  if (gp.mapping === 'standard') return gp;
+  const b = Array.from({ length: 17 }, (_, i) => gp.buttons[i] || { pressed: false, value: 0 }), ax = [...gp.axes], on = i => { b[i] = { pressed: true, value: 1 }; };
+  const hat = ax.length > 9 ? ax[9] : null;
+  if (hat !== null && hat < 1.1) { const i = Math.round((hat + 1)/0.2857);          // 8 positions : haut, haut-droite, droite, bas-droite, bas, bas-gauche, gauche, haut-gauche
+    if ([0, 1, 7].includes(i)) on(12); if ([3, 4, 5].includes(i)) on(13); if ([5, 6, 7].includes(i)) on(14); if ([1, 2, 3].includes(i)) on(15); }
+  else if (ax.length >= 8 && !b[12].pressed) { if (ax[7] < -0.5) on(12); if (ax[7] > 0.5) on(13); if (ax[6] < -0.5) on(14); if (ax[6] > 0.5) on(15); }
+  return { id: gp.id, mapping: gp.mapping, connected: true, buttons: b, axes: [ax[0] || 0, ax[1] || 0, ax[2] || 0, (ax.length > 5 ? ax[5] : ax[3]) || 0], raw: gp };
+}
 export class Input {
   constructor(root) {
     this.look = { x: 0, y: 0, zoom: 0, on: false };   // vue : sticks de la manette
@@ -50,7 +63,7 @@ export class Input {
     const k = this.keys, s = this.s; let steer = 0, th = 0, br = 0, rev = 0, hand = false;
     if (k.has('ArrowLeft') || k.has('KeyA') || k.has('KeyQ')) steer -= 1; if (k.has('ArrowRight') || k.has('KeyD')) steer += 1;
     if (k.has('ArrowUp') || k.has('KeyW') || k.has('KeyZ')) th = 1; if (k.has('ArrowDown') || k.has('KeyS')) br = 1; if (k.has('Space')) hand = true;
-    const gp = (navigator.getGamepads && [...navigator.getGamepads()].find(g => g && g.connected));
+    const gp = readPad();
     this.look.x = this.look.y = 0; this.look.zoom = 0; this.look.on = false;
     if (gp) { const B = i => !!(gp.buttons[i] && gp.buttons[i].pressed);   // manette standard : 12 haut, 13 bas, 14 gauche, 15 droite
       if (B(14)) steer -= 1; if (B(15)) steer += 1; if (B(12)) th = 1; if (B(13)) br = 1; this.look.zoom = (B(12) ? 1 : 0) - (B(13) ? 1 : 0);
