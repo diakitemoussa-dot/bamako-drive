@@ -1,6 +1,7 @@
 // Inputs: keyboard, gamepad, touch (steering drag-zone + pedals + buttons) and optional tilt steering. Output: { steer -1..1 (right = +), throttle, brake, reverse, hand }.
 export class Input {
   constructor(root) {
+    this.look = { x: 0, y: 0, zoom: 0, on: false };   // vue : sticks de la manette
     this.s = { steer: 0, throttle: 0, brake: 0, reverse: 0, hand: false }; this.keys = new Set(); this.edge = { cam: false, horn: false, lights: false, reset: false, pause: false, time: false, map: false };
     this.touch = { steer: 0, gas: 0, brake: 0, hand: false, active: false }; this.tilt = { on: false, v: 0, raw: 0, zero: null, got: false }; this.isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window || new URLSearchParams(location.search).has('touch'); this.ptr = new Map();
     addEventListener('keydown', e => { if (e.repeat) return; this.keys.add(e.code); const m = { KeyC: 'cam', KeyH: 'horn', KeyL: 'lights', KeyR: 'reset', KeyT: 'time', KeyM: 'map' }[e.code]; if (m) this.edge[m] = true; if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault(); });
@@ -50,7 +51,12 @@ export class Input {
     if (k.has('ArrowLeft') || k.has('KeyA') || k.has('KeyQ')) steer -= 1; if (k.has('ArrowRight') || k.has('KeyD')) steer += 1;
     if (k.has('ArrowUp') || k.has('KeyW') || k.has('KeyZ')) th = 1; if (k.has('ArrowDown') || k.has('KeyS')) br = 1; if (k.has('Space')) hand = true;
     const gp = (navigator.getGamepads && [...navigator.getGamepads()].find(g => g && g.connected));
-    if (gp) { const ax = gp.axes[0] || 0; if (Math.abs(ax) > 0.08) steer += ax; const rt = gp.buttons[7] ? gp.buttons[7].value : 0, lt = gp.buttons[6] ? gp.buttons[6].value : 0; th = Math.max(th, rt); br = Math.max(br, lt); if (gp.buttons[0] && gp.buttons[0].pressed) hand = true;
+    this.look.x = this.look.y = 0; this.look.zoom = 0; this.look.on = false;
+    if (gp) { const B = i => !!(gp.buttons[i] && gp.buttons[i].pressed);   // manette standard : 12 haut, 13 bas, 14 gauche, 15 droite
+      if (B(14)) steer -= 1; if (B(15)) steer += 1; if (B(12)) th = 1; if (B(13)) br = 1; this.look.zoom = (B(12) ? 1 : 0) - (B(13) ? 1 : 0);
+      const dz = v => Math.abs(v) < 0.16 ? 0 : Math.sign(v)*(Math.abs(v) - 0.16)/0.84, lx = dz(gp.axes[0] || 0) + dz(gp.axes[2] || 0), ly = dz(gp.axes[1] || 0) + dz(gp.axes[3] || 0);   // les deux sticks tournent la vue
+      this.look.x = Math.max(-1, Math.min(1, lx)); this.look.y = Math.max(-1, Math.min(1, ly)); this.look.on = !!(this.look.x || this.look.y);
+      const rt = gp.buttons[7] ? gp.buttons[7].value : 0, lt = gp.buttons[6] ? gp.buttons[6].value : 0; th = Math.max(th, rt); br = Math.max(br, lt); if (gp.buttons[0] && gp.buttons[0].pressed) hand = true;
       if (gp.buttons[3] && gp.buttons[3].pressed && !this._g3) this.edge.cam = true; this._g3 = gp.buttons[3] && gp.buttons[3].pressed; if (gp.buttons[2] && gp.buttons[2].pressed && !this._g2) this.edge.horn = true; this._g2 = gp.buttons[2] && gp.buttons[2].pressed; }
     const T = this.touch; if (T.active) steer += T.steer; th = Math.max(th, T.gas); br = Math.max(br, T.brake); hand = hand || T.hand; if (this.tilt.on) { const tv = this._tiltSteer(dt); steer += tv*1.15; const w = document.getElementById('wheel'); if (w && !T.active) w.style.transform = `rotate(${(tv*120).toFixed(1)}deg)`; }
     // smooth steering so keyboard feels progressive and returns to centre

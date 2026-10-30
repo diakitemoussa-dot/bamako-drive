@@ -78,7 +78,7 @@ function updateNightLights(dt) {
 }
 
 // ---------------- camera ----------------
-const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(); let camYaw = 0, shake = 0, fovCur = 64;
+const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(); let camYaw = 0, shake = 0, fovCur = 64, lookYaw = 0, lookPitch = 0, lookIdle = 0;
 function updateCamera(dt) {
   const p = player, speed = p.speed, back = [Math.cos(p.yaw), Math.sin(p.yaw)];
   camYaw += ((Math.hypot(p.vx, p.vz) > 4 && p.vf > 0 ? Math.atan2(p.vz*0.35 + back[1]*0.65*Math.hypot(p.vx, p.vz), p.vx*0.35 + back[0]*0.65*Math.hypot(p.vx, p.vz)) : p.yaw) - camYaw + Math.PI*3) % (Math.PI*2) - Math.PI;
@@ -87,6 +87,10 @@ function updateCamera(dt) {
   if (mode === 0) { const d = 7.2 + speed*0.035 + p.len*0.25, h = 2.7 + tall + speed*0.006; tx = p.x - fx*d; tz = p.z - fz*d; ty = p.y + h; lx = p.x + fx*6; lz = p.z + fz*6; ly = p.y + 1.1; }
   else if (mode === 1) { const hx = p.kind === 'moto' ? -0.2 : 0.35, hy = p.kind === 'truck' ? 2.55 : p.kind === 'sotrama' ? 1.9 : p.kind === 'moto' ? 1.5 : p.kind === 'suv' || p.kind === 'pickup' ? 1.55 : 1.22; tx = p.x + fx*hx; tz = p.z + fz*hx; ty = p.y + hy; lx = p.x + fx*30; lz = p.z + fz*30; ly = p.y + hy - 0.1; }
   else { const d = 14 + speed*0.08; tx = p.x - fx*d; tz = p.z - fz*d; ty = p.y + 8 + speed*0.03; lx = p.x + fx*4; lz = p.z + fz*4; ly = p.y + 0.5; }
+  { const L = input.look; if (L.on) { lookYaw += L.x*dt*2.4; lookPitch = Math.max(-0.12, Math.min(1.05, lookPitch + L.y*dt*1.2)); lookIdle = 0; } else { lookIdle += dt; if (lookIdle > 1.4) { const r = 1 - Math.exp(-dt*3); lookYaw -= Math.atan2(Math.sin(lookYaw), Math.cos(lookYaw))*r; lookPitch -= lookPitch*r; if (Math.abs(lookYaw) < 0.004 && Math.abs(lookPitch) < 0.004) lookYaw = lookPitch = 0; } }
+    if (lookYaw || lookPitch) { const c = Math.cos(lookYaw), sn = Math.sin(lookYaw);
+      if (mode === 1) { const dx = lx - tx, dz = lz - tz; lx = tx + dx*c - dz*sn; lz = tz + dx*sn + dz*c; ly += Math.tan(lookPitch)*30; }
+      else { const dx = tx - p.x, dz = tz - p.z; tx = p.x + dx*c - dz*sn; tz = p.z + dx*sn + dz*c; ty += Math.sin(lookPitch)*Math.hypot(dx, dz)*1.1; lx = p.x; lz = p.z; ly = p.y + 1.2; } } }
   const k = mode === 1 ? 1 : 1 - Math.exp(-dt*(mode === 0 ? 5.5 : 4)); camPos.x += (tx - camPos.x)*k; camPos.y += (ty - camPos.y)*k; camPos.z += (tz - camPos.z)*k; camLook.x += (lx - camLook.x)*(mode === 1 ? 1 : k*1.4); camLook.y += (ly - camLook.y)*(mode === 1 ? 1 : k*1.4); camLook.z += (lz - camLook.z)*(mode === 1 ? 1 : k*1.4);
   const g = world.ground(camPos.x, camPos.z, p.y); if (g !== null && camPos.y < g + 0.7) camPos.y = g + 0.7;
   if (shake > 0) { shake -= dt; camera.position.set(camPos.x + (Math.random() - 0.5)*shake*0.6, camPos.y + (Math.random() - 0.5)*shake*0.4, camPos.z + (Math.random() - 0.5)*shake*0.6); } else camera.position.copy(camPos);
@@ -336,6 +340,7 @@ function exploreFrame(dt) {
   const c = EX.ctl; if (!c) return; const T = c.target;
   if (EX.fly) { const k = 1 - Math.exp(-dt*4), dx = (EX.fly.x - T.x)*k, dz = (EX.fly.z - T.z)*k; T.x += dx; T.z += dz; camera.position.x += dx; camera.position.z += dz; _off.copy(camera.position).sub(T); const d = _off.length(), nd = d + (EX.fly.d - d)*k; camera.position.copy(T).addScaledVector(_off.normalize(), nd); if (Math.abs(EX.fly.x - T.x) + Math.abs(EX.fly.z - T.z) < 2) EX.fly = null; }
   const g = world.ground(T.x, T.z, null); if (g !== null) { const dy = (g - T.y)*Math.min(1, dt*3); T.y += dy; camera.position.y += dy; }
+  { const L = input.look; if (L.on || L.zoom) { _off.copy(camera.position).sub(T); const sp = new THREE.Spherical().setFromVector3(_off); sp.theta -= L.x*dt*1.6; sp.phi = Math.max(0.12, Math.min(1.5, sp.phi + L.y*dt*0.9)); sp.radius = Math.max(60, Math.min(6000, sp.radius*(1 - L.zoom*dt*0.9))); camera.position.copy(T).add(_off.setFromSpherical(sp)); } }
   c.update(); const gc = world.ground(camera.position.x, camera.position.z, null); if (gc !== null && camera.position.y < gc + 25) camera.position.y = gc + 25;
   EX.tx = T.x; EX.tz = T.z; EX.ty = T.y; EX.dist = camera.position.distanceTo(T);
   world.update(EX.tx, EX.tz); atmo.shadowR = Math.max(150, Math.min(1100, EX.dist*0.62)); atmo.update(dt, camera.position); shadowAt(T);
