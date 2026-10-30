@@ -1,8 +1,8 @@
 // Quality profiles. Auto = guess from the device (phone / tablet / laptop), then adapt the render resolution live to hold the frame rate.
 export const PROFILES = {
-  low:  { name: 'Économe', pixelRatio: 1.0, tileRadius: 480, fogFar: 520, shadows: false, shadowSize: 1024, traffic: 150, peds: 40, maxTrees: 3500, lights: 18, antialias: false, trafficLights: 40, bats: 90 },
-  med:  { name: 'Moyenne', pixelRatio: 1.25, tileRadius: 700, fogFar: 760, shadows: false, shadowSize: 1024, traffic: 300, peds: 110, maxTrees: 8000, lights: 40, antialias: false, trafficLights: 70, bats: 180 },
-  high: { name: 'Élevée', pixelRatio: 1.75, tileRadius: 1000, fogFar: 1100, shadows: true, shadowSize: 2048, traffic: 480, peds: 220, maxTrees: 16000, lights: 90, antialias: true, trafficLights: 110, bats: 320 },
+  low:  { name: 'Économe', pixelRatio: 1.0, tileRadius: 480, fogFar: 520, shadows: true, shadowSize: 1024, shadowR: 70, traffic: 150, peds: 40, maxTrees: 3500, lights: 18, antialias: false, trafficLights: 40, bats: 90 },
+  med:  { name: 'Moyenne', pixelRatio: 1.25, tileRadius: 700, fogFar: 760, shadows: true, shadowSize: 1536, shadowR: 100, traffic: 300, peds: 110, maxTrees: 8000, lights: 40, antialias: false, trafficLights: 70, bats: 180 },
+  high: { name: 'Élevée', pixelRatio: 1.75, tileRadius: 1000, fogFar: 1100, shadows: true, shadowSize: 2048, shadowR: 130, traffic: 480, peds: 220, maxTrees: 16000, lights: 90, antialias: true, trafficLights: 110, bats: 320 },
 };
 export function detect() {
   const ua = navigator.userAgent || ''; const touch = matchMedia('(pointer:coarse)').matches;

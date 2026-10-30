@@ -71,7 +71,7 @@ export class World {
     this.group = new THREE.Group(); scene.add(this.group); this.version = 0; this.treeMesh = null; this.lastCenter = [1e9, 1e9]; this.failed = new Set();
     this.treeGeoTrunk = this._trunkGeo(); this.treeGeoCrown = this._crownGeo();
     this.trunks = new THREE.InstancedMesh(this.treeGeoTrunk, new THREE.MeshLambertMaterial({ color: 0x5a3e24, flatShading: true }), 1); this.crowns = new THREE.InstancedMesh(this.treeGeoCrown, new THREE.MeshLambertMaterial({ flatShading: true }), 1);
-    for (const m of [this.trunks, this.crowns]) { m.frustumCulled = false; m.count = 0; scene.add(m); }
+    for (const m of [this.trunks, this.crowns]) { m.frustumCulled = false; m.count = 0; m.castShadow = m.receiveShadow = !!this.q.shadows; scene.add(m); }
     this.onTilesChanged = null; this.onTileLoaded = null;
   }
   _trunkGeo() { const g = new THREE.CylinderGeometry(0.14, 0.2, 1, 5); g.translate(0, 0.5, 0); return g; }
@@ -122,12 +122,12 @@ export class World {
     const toF = (i16, n) => { const f = new Float32Array(n*3); for (let i = 0; i < n*3; i++) f[i] = i16[i]*qs; return f; };
     if (head.n) {
       const n = head.n, pos = toF(new Int16Array(buf, base + off.pos, n*3), n), col = new Uint8Array(buf.slice(base + off.col, base + off.col + n*4));
-      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 4, true)); g.setAttribute('aN', new THREE.BufferAttribute(flatNormals(pos), 3, true)); g.computeBoundingSphere();
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 4, true)); const nA = new THREE.BufferAttribute(flatNormals(pos), 3, true); g.setAttribute('aN', nA); g.setAttribute('normal', nA); g.computeBoundingSphere();   // 'normal' est nécessaire pour que les ombres soient reçues
       const m = new THREE.Mesh(g, this.mat); m.position.set(head.ox, 0, head.oz); m.matrixAutoUpdate = false; m.updateMatrix(); m.castShadow = this.q.shadows; m.receiveShadow = this.q.shadows; this.group.add(m); t.meshes.push(m);
     }
     if (head.nk) {
       const n = head.nk, pos = toF(new Int16Array(buf, base + off.kpos, n*3), n), col = new Uint8Array(buf.slice(base + off.kcol, base + off.kcol + n*3)), v = new Float32Array(buf.slice(base + off.kv, base + off.kv + n*4));
-      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3, true)); g.setAttribute('aV', new THREE.BufferAttribute(v, 1)); g.computeBoundingSphere();
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3, true)); g.setAttribute('aV', new THREE.BufferAttribute(v, 1)); g.setAttribute('normal', new THREE.BufferAttribute(flatNormals(pos), 3, true)); g.computeBoundingSphere();
       const m = new THREE.Mesh(g, this.kmat); m.position.set(head.ox, 0, head.oz); m.matrixAutoUpdate = false; m.updateMatrix(); m.receiveShadow = this.q.shadows; this.group.add(m); t.meshes.push(m);
     }
     t.trees = head.nt ? new Float32Array(buf.slice(base + off.trees, base + off.trees + head.nt*24)) : null; t.nt = head.nt;
@@ -141,7 +141,7 @@ export class World {
   _rebuildInstances() {
     let n = 0; for (const t of this.tiles.values()) n += t.nt || 0;
     const cap = Math.min(n, this.q.maxTrees); if (cap > this.trunks.instanceMatrix.count) {
-      for (const k of ['trunks', 'crowns']) { const old = this[k]; this.scene.remove(old); const m = new THREE.InstancedMesh(old.geometry, old.material, Math.ceil(cap*1.3) + 200); m.frustumCulled = false; this.scene.add(m); this[k] = m; }
+      for (const k of ['trunks', 'crowns']) { const old = this[k]; this.scene.remove(old); const m = new THREE.InstancedMesh(old.geometry, old.material, Math.ceil(cap*1.3) + 200); m.frustumCulled = false; m.castShadow = m.receiveShadow = !!this.q.shadows; this.scene.add(m); this[k] = m; }
     }
     const M = new THREE.Matrix4(), C = new THREE.Color(), pc = this.pcenter || [0, 0]; let i = 0;
     for (const t of this.tiles.values()) { if (!t.trees) continue; const a = t.trees;

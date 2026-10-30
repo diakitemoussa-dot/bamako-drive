@@ -12,7 +12,7 @@ export class Atmosphere {
     this.sky = new Sky(); this.sky.scale.setScalar(9000); scene.add(this.sky);
     const u = this.sky.material.uniforms; u.turbidity.value = 7; u.rayleigh.value = 1.6; u.mieCoefficient.value = 0.006; u.mieDirectionalG.value = 0.82;
     this.sun = new THREE.DirectionalLight(0xffffff, 3); this.sun.castShadow = quality.shadows; scene.add(this.sun); scene.add(this.sun.target);
-    if (quality.shadows) { const s = this.sun.shadow; s.mapSize.set(quality.shadowSize, quality.shadowSize); const c = s.camera; c.left = -80; c.right = 80; c.top = 80; c.bottom = -80; c.near = 10; c.far = 500; s.bias = -0.0006; s.normalBias = 0.4; }
+    this.shadowR = quality.shadowR || 80; this._sr = 0; this.keyDir = new THREE.Vector3(0, 1, 0); if (quality.shadows) { const s = this.sun.shadow; s.mapSize.set(quality.shadowSize, quality.shadowSize); const c = s.camera; c.left = -80; c.right = 80; c.top = 80; c.bottom = -80; c.near = 10; c.far = 500; s.bias = -0.0006; s.normalBias = 0.4; }
     this.moon = new THREE.DirectionalLight(0x7f9bd6, 0.0); scene.add(this.moon); scene.add(this.moon.target);
     this.hemi = new THREE.HemisphereLight(0xbcd4ff, 0x6b5a45, 1.0); scene.add(this.hemi);
     this.fog = new THREE.Fog(0xb8c8dc, 120, quality.fogFar); scene.fog = this.fog; scene.background = null;
@@ -29,17 +29,20 @@ export class Atmosphere {
   setPreset(name) { this.hours = PRESETS[name]; this.auto = false; }
   label() { const h = Math.floor(this.hours) % 24, m = Math.floor((this.hours % 1)*60); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); }
   period() { const e = this.elev; return e > 0.2 ? 'Jour' : e > -0.08 ? (this.hours < 12 ? 'Aube' : 'Soir') : 'Nuit'; }
+  /** demi-largeur (m) de la zone ombrée autour du point regardé : petite en conduite, large en exploration */
+  setShadowRange(r) { if (!this.sun.castShadow || Math.abs(r - this._sr) < this._sr*0.03) return; this._sr = r; const c = this.sun.shadow.camera; c.left = -r; c.right = r; c.top = r; c.bottom = -r; c.near = 10; c.far = r*4 + 600; c.updateProjectionMatrix(); }
   update(dt, focus) {
     if (this.auto) this.hours = (this.hours + dt*this.autoSpeed) % 24;
-    const t = this.hours, el = 75*Math.PI/180*Math.sin((t - 6)/24*2*Math.PI), ph = (t - 6)/12*Math.PI;
+    const t = this.hours, el = 60*Math.PI/180*Math.sin((t - 6)/24*2*Math.PI), ph = (t - 6)/12*Math.PI;
     this.sunDir.set(Math.cos(ph)*Math.cos(el), Math.sin(el), Math.sin(ph)*Math.cos(el)).normalize(); this.elev = Math.sin(el);
     const se = this.elev, day = smooth(-0.04, 0.28, se), night = 1 - smooth(-0.20, 0.07, se); this.night = night; shared.uNight.value = night; this.dusk = 1 - smooth(0.02, 0.34, se); shared.uDusk.value = this.dusk;
     this.sky.material.uniforms.sunPosition.value.copy(this.sunDir);
     const low = 1 - smooth(0.05, 0.45, Math.abs(se));                        // 1 near the horizon
-    this.sun.position.copy(focus).addScaledVector(this.sunDir, 250); this.sun.target.position.copy(focus);
-    this.sun.color.setRGB(1.0, 0.93 - 0.35*low, 0.84 - 0.55*low); this.sun.intensity = 3.4*smooth(0.0, 0.18, se);
-    this.moon.position.copy(focus).addScaledVector(this.sunDir, -250); this.moon.target.position.copy(focus); this.moon.intensity = 0.55*night*(this.sunDir.y < 0 ? 1 : 0);
-    this.hemi.intensity = 0.28 + 0.95*day; this.hemi.color.setRGB(0.52 + 0.28*day, 0.6 + 0.3*day, 0.85 + 0.15*day); this.hemi.groundColor.setRGB(0.25 + 0.18*day, 0.2 + 0.16*day, 0.16 + 0.13*day);
+    // la lumière « sun » est aussi celle de la lune la nuit : une seule carte d'ombre, jamais de recompilation de shaders
+    if (se >= 0) { this.keyDir.copy(this.sunDir); this.sun.color.setRGB(1.0, 0.93 - 0.35*low, 0.84 - 0.55*low); this.sun.intensity = 3.4*smooth(0.0, 0.18, se); } else { this.keyDir.copy(this.sunDir).negate(); this.sun.color.setRGB(0.5, 0.61, 0.84); this.sun.intensity = 0.55*night; }
+    this.setShadowRange(this.shadowR); this.sun.position.copy(focus).addScaledVector(this.keyDir, this._sr*2 + 170); this.sun.target.position.copy(focus);
+    this.moon.position.copy(focus).addScaledVector(this.sunDir, -250); this.moon.target.position.copy(focus); this.moon.intensity = 0;
+    this.hemi.intensity = 0.28 + 0.8*day; this.hemi.color.setRGB(0.52 + 0.28*day, 0.6 + 0.3*day, 0.85 + 0.15*day); this.hemi.groundColor.setRGB(0.25 + 0.18*day, 0.2 + 0.16*day, 0.16 + 0.13*day);
     // night: slightly lift the shadows so the streets stay readable without killing the mood
     this.hemi.intensity = Math.max(this.hemi.intensity, 0.46*night + 0.28);
     const horizon = this.tmp.setRGB(0.68, 0.77, 0.9).lerp(new THREE.Color(0.95, 0.52, 0.32), low*0.85*smooth(-0.1, 0.1, se + 0.05)).lerp(new THREE.Color(0.025, 0.04, 0.085), night);

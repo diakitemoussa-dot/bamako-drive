@@ -28,7 +28,7 @@ let renderer, scene, camera, world, atmo, models, graph, player, input, sound, d
 function createRenderer() {
   if (renderer) renderer.dispose();
   renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: prof.antialias, powerPreference: 'high-performance', alpha: false });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, prof.pixelRatio)); renderer.setSize(innerWidth, innerHeight, false); renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.shadowMap.enabled = prof.shadows; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.setPixelRatio(Math.min(devicePixelRatio, prof.pixelRatio)); renderer.setSize(innerWidth, innerHeight, false); renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.shadowMap.enabled = prof.shadows; renderer.shadowMap.type = prof === PROFILES.low ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 }
 function setupScene() {
   scene = new THREE.Scene(); camera = new THREE.PerspectiveCamera(64, innerWidth/innerHeight, 0.4, 6000); scene.add(camera);
@@ -272,10 +272,10 @@ function frame(now) {
     const inp = input.poll(dt); player.world.night = atmo.night; player.update(dt, inp, traffic); world.update(player.x, player.z); player.hornT = inp.horn ? 1 : 0;
     const horn = e.horn || input.keys.has('KeyH'); sound.horn(horn); if (horn) state.honk = 1;
     atmo.update(dt, camera.position.lengthSq() ? camera.position : player.car.root.position); updateNightLights(dt); updateCamera(dt); if (traffic) traffic.update(dt, atmo.night, camera); updateHud(dt);
-    sound.update(player.speed, player.rpm, inp.throttle, player.drift, atmo.night); if (atmo.sun.castShadow) { const s = atmo.sun; s.position.copy(player.car.root.position).addScaledVector(atmo.sunDir, 220); s.target.position.copy(player.car.root.position); }
+    sound.update(player.speed, player.rpm, inp.throttle, player.drift, atmo.night); atmo.shadowR = prof.shadowR; shadowAt(player.car.root.position);
   } else if (EX.on) { exploreFrame(dt);
   } else if (!state.running && world) { // menu: slow orbit above the city
-    const t = now/1000*0.05, cx = PLACES[sel.place].x, cz = PLACES[sel.place].z; camera.position.set(cx + Math.cos(t)*160, 90, cz + Math.sin(t)*160); camera.lookAt(cx, 10, cz); world.update(cx, cz); atmo.update(dt, camera.position); atmo.sun.castShadow = false;
+    const t = now/1000*0.05, cx = PLACES[sel.place].x, cz = PLACES[sel.place].z; camera.position.set(cx + Math.cos(t)*160, 90, cz + Math.sin(t)*160); camera.lookAt(cx, 10, cz); world.update(cx, cz); atmo.shadowR = 170; atmo.update(dt, camera.position);
   }
   if (atmo) updateBeacons(now);
   if (bats && atmo) { const f = state.running && player ? player.car.root.position : EX.on ? _bf.set(EX.tx, EX.ty, EX.tz) : _bf.set(PLACES[sel.place].x, 20, PLACES[sel.place].z); bats.update(dt, f, atmo.elev, camera.position); }
@@ -324,13 +324,14 @@ function stopExplore(toGame) {
   if (!toGame) { $('menu').classList.remove('hidden'); if (player) $('backGame').classList.remove('hidden'); }
 }
 const _v = new THREE.Vector3(), _bf = new THREE.Vector3();
+function shadowAt(p) { atmo.sun.position.copy(p).addScaledVector(atmo.keyDir, atmo._sr*2 + 170); atmo.sun.target.position.copy(p); }
 function exploreFrame(dt) {
   const c = EX.ctl; if (!c) return; const T = c.target;
   if (EX.fly) { const k = 1 - Math.exp(-dt*4), dx = (EX.fly.x - T.x)*k, dz = (EX.fly.z - T.z)*k; T.x += dx; T.z += dz; camera.position.x += dx; camera.position.z += dz; _off.copy(camera.position).sub(T); const d = _off.length(), nd = d + (EX.fly.d - d)*k; camera.position.copy(T).addScaledVector(_off.normalize(), nd); if (Math.abs(EX.fly.x - T.x) + Math.abs(EX.fly.z - T.z) < 2) EX.fly = null; }
   const g = world.ground(T.x, T.z, null); if (g !== null) { const dy = (g - T.y)*Math.min(1, dt*3); T.y += dy; camera.position.y += dy; }
   c.update(); const gc = world.ground(camera.position.x, camera.position.z, null); if (gc !== null && camera.position.y < gc + 25) camera.position.y = gc + 25;
   EX.tx = T.x; EX.tz = T.z; EX.ty = T.y; EX.dist = camera.position.distanceTo(T);
-  world.update(EX.tx, EX.tz); atmo.update(dt, camera.position); atmo.sun.castShadow = false;
+  world.update(EX.tx, EX.tz); atmo.shadowR = Math.max(150, Math.min(1100, EX.dist*0.62)); atmo.update(dt, camera.position); shadowAt(T);
   if (traffic && EX.focus) { EX.focus.x = T.x; EX.focus.z = T.z; traffic.scale = Math.max(1, Math.min(3.5, EX.dist/400)); traffic.setNight(atmo.night); traffic.update(dt, atmo.night, camera); }
   EX.labT -= dt; const refresh = EX.labT <= 0; if (refresh) EX.labT = 1; camera.updateMatrixWorld(); const W = innerWidth, H = innerHeight;
   LANDMARKS.forEach((l, i) => { const o = EX.labels[i]; if (refresh) { const gy = world.ground(l.x, l.z, null); if (gy !== null) o.y = gy + 55; }

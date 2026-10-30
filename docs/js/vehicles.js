@@ -32,7 +32,7 @@ export class Models {
 export class CarMesh {
   constructor(models, kind, color) {
     const K = models.kinds[kind], M = models.mats; this.kind = kind; this.K = K; this.root = new THREE.Group(); this.root.rotation.order = 'YXZ'; this.parts = new THREE.Group(); this.root.add(this.parts);
-    const mk = (g, mat, name) => { if (!g) return null; const m = new THREE.Mesh(g, mat); m.castShadow = true; this.parts.add(m); this[name] = m; return m; };
+    const mk = (g, mat, name) => { if (!g) return null; const m = new THREE.Mesh(g, mat); m.castShadow = true; m.receiveShadow = true; this.parts.add(m); this[name] = m; return m; };
     const bm = new THREE.MeshLambertMaterial({ color: new THREE.Color().setRGB(...(color || K.colors[0])), flatShading: true });
     mk(K.body, bm, 'body'); mk(K.detail, M.detail, 'detail'); mk(K.front, M.front, 'front'); this.rearMat = new THREE.MeshBasicMaterial({ color: 0x5a0a08 }); mk(K.rear, this.rearMat, 'rear'); mk(K.sign, M.sign, 'sign');
     this.wheels = K.wheels.map(w => { const g = new THREE.Group(); g.position.set(w.x, w.y, w.z); const m = new THREE.Mesh(K.wheelGeo, M.wheel); m.castShadow = true; g.add(m); this.parts.add(g); return { g, m, front: w.front && kind !== 'moto', r: w.r }; });

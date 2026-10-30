@@ -128,7 +128,7 @@ export class Traffic {
   // ---------- rendering ----------
   _buildMeshes() {
     this.objs = this.objs || []; const cap = Math.max(60, Math.ceil(this.prof.traffic*1.15)), M = this.models.mats; this.inst = {}; this.cap = cap;
-    const mk = (geo, mat, c, tint) => { const m = new THREE.InstancedMesh(geo, mat, c); m.frustumCulled = false; m.count = 0; m.castShadow = false; this.scene.add(m); this.objs.push(m); if (tint) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(c*3), 3); return m; };
+    const mk = (geo, mat, c, tint) => { const m = new THREE.InstancedMesh(geo, mat, c); m.frustumCulled = false; m.count = 0; m.castShadow = m.receiveShadow = !!this.prof.shadows; this.scene.add(m); this.objs.push(m); if (tint) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(c*3), 3); return m; };
     for (const k of KINDS) { const K = this.models.kinds[k], c = cap; this.inst[k] = { body: mk(K.body, M.body, c, true), detail: mk(K.detail, M.detail, c), front: K.front ? mk(K.front, M.front, c) : null, rear: K.rear ? mk(K.rear, new THREE.MeshBasicMaterial({ color: 0x5a0a08 }), c) : null, sign: K.sign ? mk(K.sign, M.sign, c) : null, wheels: mk(K.wheelGeo, M.wheel, c*K.wheels.length), n: 0 }; this.inst[k].rearMat = this.inst[k].rear && this.inst[k].rear.material; }
     // halos de phares (nuit) : un point lumineux additif par phare, positionné chaque image devant les véhicules affichés
     { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d'), r = g.createRadialGradient(32, 32, 1, 32, 32, 31); r.addColorStop(0, 'rgba(255,248,225,1)'); r.addColorStop(0.25, 'rgba(255,236,190,.65)'); r.addColorStop(1, 'rgba(255,220,150,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64);

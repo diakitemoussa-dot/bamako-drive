@@ -18,7 +18,7 @@ export function install(T) {
   const P = T.prototype;
   P._buildFurniture = function () {
     this.furn = {}; const box = new THREE.BoxGeometry(1, 1, 1), dark = new THREE.MeshLambertMaterial({ color: 0x4a4e55, flatShading: true }), head = new THREE.MeshLambertMaterial({ color: 0x0b0b0d, flatShading: true });
-    const mk = (g, m, cap, color) => { const o = new THREE.InstancedMesh(g, m, cap); o.frustumCulled = false; o.count = 0; if (color) o.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap*3), 3); this.scene.add(o); this.objs.push(o); return o; };
+    const mk = (g, m, cap, color) => { const o = new THREE.InstancedMesh(g, m, cap); o.frustumCulled = false; o.count = 0; o.castShadow = o.receiveShadow = !!this.prof.shadows; if (color) o.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap*3), 3); this.scene.add(o); this.objs.push(o); return o; };
     this.furn.poles = mk(box, dark, 420); this.furn.arms = mk(box, dark, 420); this.furn.heads = mk(box, head, 700); this.furn.lamps = mk(box, new THREE.MeshBasicMaterial({ color: 0xffffff }), 2200, true);
     this.furn.zebra = mk(box, new THREE.MeshLambertMaterial({ color: 0xe9e9e2 }), 2400); this.furn.spoles = mk(box, dark, 1300);
     const pg = new THREE.PlaneGeometry(0.8, 0.8); this.furn.signs = {};
@@ -57,7 +57,7 @@ export function install(T) {
   P._signals = function (dt) { };
   // ---------- pedestrians ----------
   P._buildPeds = function () {
-    const cap = Math.max(20, this.prof.peds), mk = (g, m, tint) => { const o = new THREE.InstancedMesh(g, m, cap); o.frustumCulled = false; o.count = 0; if (tint) o.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap*3), 3); this.scene.add(o); this.objs.push(o); return o; };
+    const cap = Math.max(20, this.prof.peds), mk = (g, m, tint) => { const o = new THREE.InstancedMesh(g, m, cap); o.frustumCulled = false; o.count = 0; o.castShadow = o.receiveShadow = !!this.prof.shadows; if (tint) o.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap*3), 3); this.scene.add(o); this.objs.push(o); return o; };
     const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }); const body = new THREE.BoxGeometry(0.4, 0.62, 0.24); body.translate(0, 1.16, 0); const head = new THREE.BoxGeometry(0.2, 0.24, 0.2); head.translate(0, 1.6, 0); const leg = new THREE.BoxGeometry(0.14, 0.86, 0.14); leg.translate(0, -0.43, 0);
     this.pm = { body: mk(body, mat, true), head: mk(head, mat, true), legL: mk(leg, mat, true), legR: mk(leg, mat, true), cap }; this.peds = [];
   };
