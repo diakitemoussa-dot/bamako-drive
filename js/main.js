@@ -214,9 +214,9 @@ const MOMENTS = [
   { t: 'nuit', name: 'Nuit', sub: () => 'Phares, vitrines éclairées, balises rouges, étoiles.' },
   { t: 'auto', name: 'Cycle automatique', sub: () => 'Le temps passe : tu vois le jour se coucher puis la nuit.' }];
 const SKY = {
-  jour: { sil: '#E6D49A', top: '#86ADD4', bot: '#F4E0BD', b1: '#C9A68C', b2: '#A98269', gr: '#BE8A62', sx: 540, sy: 130, sun: 1, moon: 0, star: 0, win: 0, bat: 0, tail: 0, p: 'Jour', k: ['Ombres nettes', 'Trafic maximal'] },
-  soir: { sil: '#E0A650', top: '#55415D', bot: '#EE9A5A', b1: '#7A5C6C', b2: '#6A4F63', gr: '#8C5E4E', sx: 420, sy: 330, sun: .95, moon: 0, star: .25, win: .55, bat: 1, tail: .9, p: 'Soir', k: ['Lampadaires allumés', 'Chauves-souris'] },
-  nuit: { sil: '#A89050', top: '#14102A', bot: '#3B2C5A', b1: '#2E2640', b2: '#262036', gr: '#2D2530', sx: 540, sy: 130, sun: 0, moon: 1, star: 1, win: 1, bat: 1, tail: 1, p: 'Nuit', k: ['Phares et vitrines', 'Balises rouges'] } };
+  jour: { sil: '#323536', top: '#86ADD4', bot: '#F4E0BD', b1: '#C9A68C', b2: '#A98269', gr: '#BE8A62', sx: 540, sy: 130, sun: 1, moon: 0, star: 0, win: 0, bat: 0, tail: 0, p: 'Jour', k: ['Ombres nettes', 'Trafic maximal'] },
+  soir: { sil: '#323536', top: '#55415D', bot: '#EE9A5A', b1: '#7A5C6C', b2: '#6A4F63', gr: '#8C5E4E', sx: 420, sy: 330, sun: .95, moon: 0, star: .25, win: .55, bat: 1, tail: .9, p: 'Soir', k: ['Lampadaires allumés', 'Chauves-souris'] },
+  nuit: { sil: '#323536', top: '#14102A', bot: '#3B2C5A', b1: '#2E2640', b2: '#262036', gr: '#2D2530', sx: 540, sy: 130, sun: 0, moon: 1, star: 1, win: 1, bat: 1, tail: 1, p: 'Nuit', k: ['Phares et vitrines', 'Balises rouges'] } };
 function momentFill() {
   const box = $('mOpts'); box.innerHTML = '';
   MOMENTS.forEach(m => { const b = document.createElement('button'); b.className = 'opt' + (sel.time === m.t ? ' on' : ''); b.innerHTML = '<b>' + m.name + (m.tag ? '<em>Conseillé</em>' : '') + '</b><span>' + m.sub() + '</span>'; b.onclick = () => { sel.time = m.t; momentFill(); }; box.appendChild(b); });
@@ -230,7 +230,7 @@ function momentFill() {
     + '<defs><mask id="skm" maskUnits="userSpaceOnUse" x="0" y="265" width="700" height="206"><image href="icons/skyline.png" x="0" y="265.5" width="700" height="204.5" preserveAspectRatio="none"/></mask></defs>'
     + '<rect x="0" y="265" width="700" height="206" fill="' + P.sil + '" mask="url(#skm)"/>'
     + '<rect y="470" width="700" height="130" fill="' + P.gr + '"/><polygon points="270,470 430,470 640,600 60,600" fill="#3F3A48"/><polygon points="346,478 354,478 372,600 328,600" fill="#F8F3EA" opacity=".8"/>'
-    + '<g opacity="' + P.win + '"><circle cx="234" cy="431" r="20" fill="#FFE6A8" opacity=".5"/><circle cx="459" cy="431" r="20" fill="#FFE6A8" opacity=".5"/><circle cx="651" cy="431" r="20" fill="#FFE6A8" opacity=".5"/></g>'
+    + '<g opacity="' + P.win + '"><circle cx="234" cy="431" r="34" fill="url(#gl)" opacity=".9"/><circle cx="459" cy="431" r="34" fill="url(#gl)" opacity=".9"/><circle cx="651" cy="431" r="34" fill="url(#gl)" opacity=".9"/></g>'
     + '<g opacity="' + P.bat + '" fill="#2B2233"><path d="M120 120 q10 -12 20 0 q10 -12 20 0 q-10 4 -20 10 q-10 -6 -20 -10z"/><path d="M420 80 q8 -10 16 0 q8 -10 16 0 q-8 3 -16 8 q-8 -5 -16 -8z"/><path d="M270 170 q8 -10 16 0 q8 -10 16 0 q-8 3 -16 8 q-8 -5 -16 -8z"/></g>'
     + '<g transform="translate(250 506)"><rect width="200" height="80" rx="22" fill="' + rgb + '" stroke="#2B2030" stroke-width="3"/><rect x="26" y="12" width="140" height="30" rx="10" fill="#4C5E73"/><rect x="10" y="52" width="26" height="12" rx="4" fill="#C23B35" opacity="' + P.tail + '"/><rect x="164" y="52" width="26" height="12" rx="4" fill="#C23B35" opacity="' + P.tail + '"/></g></svg>'
     + '<div class="mClock"><b>' + clock + '</b><small>' + (sel.time === 'auto' ? 'Le temps s’écoule' : P.p) + '</small></div><div class="mPerks"><span>' + P.k[0] + '</span><span>' + P.k[1] + '</span></div>';
