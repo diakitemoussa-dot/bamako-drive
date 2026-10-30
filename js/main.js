@@ -35,7 +35,7 @@ function setupScene() {
   world = new World(scene, prof); atmo = new Atmosphere(scene, renderer, prof); dyn = new DynRes(renderer, prof.pixelRatio);
 }
 addEventListener('resize', () => { if (!renderer) return; renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); checkOrientation(); });
-function checkOrientation() { const portrait = innerHeight > innerWidth*1.05 && input && input.isTouch; $('rotate').classList.toggle('hidden', !(portrait && state.running)); }
+function checkOrientation() { const portrait = innerHeight > innerWidth*1.05 && input && input.isTouch; $('rotate').classList.toggle('hidden', !portrait); }
 
 // ---------------- toasts / score ----------------
 function toast(msg, kind = '', t = 2.2) { const el = $('toast'); el.textContent = msg; el.className = 'show ' + kind; state.toast = t; }
@@ -181,9 +181,16 @@ async function setTilt(on) {
   else { input.disableTilt(); const w = $('wheel'); if (w) w.style.transform = 'rotate(0deg)'; toast('Volant à l\'écran', '', 1.6); }
   $('tilt').checked = on; $('btnTilt').classList.toggle('on', on); try { localStorage.setItem('tilt', on ? '1' : '0'); } catch (e) {}
 }
-function goFullscreen() {   // phones: fill the screen and lock landscape (when the browser allows it)
-  if (!input.isTouch) return; const el = document.documentElement; try { const f = el.requestFullscreen || el.webkitRequestFullscreen; if (f) { const p = f.call(el); if (p && p.catch) p.catch(() => {}); } } catch (e) {}
-  try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (e) {}
+function goFullscreen() {   // téléphones : plein écran (barre du navigateur masquée) puis verrouillage en paysage — Android/Chrome ; iPhone/Safari ne propose ni l'un ni l'autre (voir l'astuce « écran d'accueil »)
+  if (!input.isTouch || document.fullscreenElement || document.webkitFullscreenElement) return; const el = document.documentElement, f = el.requestFullscreen || el.webkitRequestFullscreen; if (!f) return;
+  const lock = () => { try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (e) {} };
+  try { const p = f.call(el, { navigationUI: 'hide' }); if (p && p.then) p.then(lock, () => {}); else lock(); } catch (e) {}
+}
+function setupEntryFullscreen() {   // dès le premier toucher (le navigateur exige un geste) ; on réessaie tant que le plein écran n'est pas actif
+  if (!input.isTouch) return; const go = () => goFullscreen(); addEventListener('pointerdown', go, true); addEventListener('touchend', go, true);
+  document.addEventListener('fullscreenchange', () => { checkOrientation(); });
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) && !navigator.standalone && !document.fullscreenEnabled && !document.webkitFullscreenEnabled; let seen = false; try { seen = localStorage.getItem('bd_ios_tip') === '1'; } catch (e) {}
+  if (ios && !seen) { const t = document.createElement('div'); t.id = 'iosTip'; t.innerHTML = '<span>Pour jouer en plein écran : touche <b>Partager</b> puis <b>Sur l\u2019écran d\u2019accueil</b>, et lance le jeu depuis cette icône.</span><button aria-label="Fermer">\u2715</button>'; t.querySelector('button').onclick = () => { t.remove(); try { localStorage.setItem('bd_ios_tip', '1'); } catch (e) {} }; document.body.appendChild(t); }
 }
 function pause(on) { if (!state.running) return; if (BM.open) closeMap(); state.paused = on; $('pause').classList.toggle('hidden', !on); if (on) { sound.horn(false); input.keys.clear(); const T = input.touch; T.gas = T.brake = 0; T.hand = false; T.steer = 0; T.active = false; input.ptr.clear(); } }
 function toMenu() { pause(false); state.running = false; $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('menu').classList.remove('hidden'); showView('home'); if (player) $('backGame').classList.remove('hidden'); sound.horn(false); }
@@ -342,7 +349,7 @@ function exploreFrame(dt) {
 
 // ---------------- boot ----------------
 (async function boot() {
-  input = new Input(document.body); if (input.isTouch) document.body.classList.add('touch'); sound = new Sound(); createRenderer(); setupScene(); setupLights(); const prog = (f, t) => { $('loadFill').style.width = $('splashFill').style.width = Math.round(f*100) + '%'; $('loadTxt').textContent = $('splashTxt').textContent = t; };
+  input = new Input(document.body); if (input.isTouch) document.body.classList.add('touch'); setupEntryFullscreen(); checkOrientation(); sound = new Sound(); createRenderer(); setupScene(); setupLights(); const prog = (f, t) => { $('loadFill').style.width = $('splashFill').style.width = Math.round(f*100) + '%'; $('loadTxt').textContent = $('splashTxt').textContent = t; };
   prog(0.05, 'Chargement de la ville…'); await world.init(); prog(0.2, 'Chargement des véhicules…'); models = await new Models().load(); prog(0.4, 'Réseau routier…'); graph = await new Graph().load(); const river = await fetch('data/river.json').then(r => r.json()).catch(() => null); graph.renderMap(-2450, -2800, 4900, 5600, 5, river);
   prog(0.7, 'Circulation…'); try { const m = await import('./traffic.js'); traffic = new m.Traffic(scene, world, graph, models, prof); await traffic.init(); } catch (e) { console.warn('traffic unavailable', e); }
   bats = new Bats(scene, world, prof.bats || 150); setupBeacons();
