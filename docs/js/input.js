@@ -7,8 +7,9 @@ export function readPad() {
   // plusieurs « manettes » peuvent être vues (souris/clavier gamer, volant virtuel…) : on suit celle qui bouge ou dont un bouton est enfoncé
   readPad.axPrev = readPad.axPrev || {}; for (const g of pads) { const pa = readPad.axPrev[g.index], moved = pa && g.axes.some((v, i) => Math.abs(v - (pa[i] ?? v)) > 0.25); readPad.axPrev[g.index] = [...g.axes]; if (moved || g.buttons.some(b => b.pressed)) readPad.last = g.index; }
   const gp = pads.find(g => g.index === readPad.last) || pads[0];
-  if (gp.mapping === 'standard') return gp;
-  const b = Array.from({ length: 17 }, (_, i) => gp.buttons[i] || { pressed: false, value: 0 }), ax = [...gp.axes], on = i => { b[i] = { pressed: true, value: 1 }; };
+  const norm = gp.buttons.length ? Array.from(gp.buttons, bt => ({ pressed: !!bt && (bt.pressed || bt.value > 0.4), value: bt ? bt.value : 0 })) : [];
+  if (gp.mapping === 'standard') return { id: gp.id, mapping: gp.mapping, connected: true, count: pads.length, buttons: norm, axes: [gp.axes[0] || 0, gp.axes[1] || 0, gp.axes[2] || 0, gp.axes[3] || 0], raw: gp };
+  const b = Array.from({ length: 17 }, (_, i) => norm[i] || { pressed: false, value: 0 }), ax = [...gp.axes], on = i => { b[i] = { pressed: true, value: 1 }; };
   const hat = ax.length > 9 ? ax[9] : null;
   if (hat !== null && hat < 1.1) { const i = Math.round((hat + 1)/0.2857);          // 8 positions : haut, haut-droite, droite, bas-droite, bas, bas-gauche, gauche, haut-gauche
     if ([0, 1, 7].includes(i)) on(12); if ([3, 4, 5].includes(i)) on(13); if ([5, 6, 7].includes(i)) on(14); if ([1, 2, 3].includes(i)) on(15); }

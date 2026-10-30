@@ -289,10 +289,15 @@ addEventListener('gamepadconnected', e => padNote('🎮 Manette connectée : ' +
 addEventListener('gamepaddisconnected', () => padNote('Manette déconnectée'));
 const PAD_DEBUG = new URLSearchParams(location.search).has('pad');
 function padDebug() { if (!PAD_DEBUG) return; let d = $('padDbg'); if (!d) { d = document.createElement('pre'); d.id = 'padDbg'; document.body.appendChild(d); } const gp = readPad(); const all = navigator.getGamepads ? [...navigator.getGamepads()].filter(g => g && g.connected).map(g => g.index + ': ' + g.id.slice(0, 34) + ' [' + (g.mapping || 'vide') + ', ' + g.buttons.length + ' boutons, ' + g.axes.length + ' axes]').join('\n') : ''; d.textContent = gp ? 'manettes vues:\n' + all + '\nutilisée: ' + gp.id.slice(0, 40) + '\nmapping: ' + (gp.mapping || '(vide)') + '\nboutons: ' + gp.buttons.map((b, i) => b.pressed ? i : '').filter(x => x !== '').join(' ') + '\naxes: ' + gp.axes.map(x => x.toFixed(2)).join(' ') : 'Aucune manette détectée.\nAppuie sur un bouton de la manette (le navigateur ne la voit qu’après un premier appui).'; }
+function padLoop() { requestAnimationFrame(padLoop); try { padMenu(); padDebug(); } catch (e) { if (!padLoop.err) { padLoop.err = 1; console.warn('manette', e); } } }
+requestAnimationFrame(padLoop);
 function padMenu() {
-  const gp = readPad(); if (!gp) return;
+  const gp = readPad(); if (!gp) { PAD.seen = false; return; }
+  if (!PAD.seen) { PAD.seen = true; PAD.warm = performance.now() + 500; }   // ignore l'appui qui vient de « réveiller » la manette
   const edge = i => { const d = !!(gp.buttons[i] && gp.buttons[i].pressed), e = d && !PAD.prev[i]; PAD.prev[i] = d; return e; };
   const up = edge(12), down = edge(13), left = edge(14), right = edge(15), a0 = edge(0), a2 = edge(2), ok = a0 || a2, back = edge(1);
+  if (performance.now() < PAD.warm) return;
+  if ($('nameGate')) { if (up || down || left || right || ok || back) padNote('Tape ton nom au clavier ou \u00e0 l\u2019\u00e9cran, puis valide : la manette ne sait pas \u00e9crire.'); return; }
   const start = edge(9); if (start && state.running) { pause(!state.paused); return; }   // Start = pause / reprise
   if (EX.on) { if (back) $('exQuit').click(); return; }
   const box = padContainer(); if (!box) { if (PAD.cur) padSetFocus(null); return; }
@@ -323,7 +328,7 @@ async function applyQuality(p) { prof = p; createRenderer(); const keep = { hour
 
 let last = performance.now(), fpsT = 0;
 function frame(now) {
-  requestAnimationFrame(frame); let dt = Math.min((now - last)/1000, 0.06); last = now; if (!world) return; padMenu(); padDebug(); if (garage && garage.on) garage.frame(dt);
+  requestAnimationFrame(frame); let dt = Math.min((now - last)/1000, 0.06); last = now; if (!world) return; if (garage && garage.on) garage.frame(dt);
   shared.uTime.value = now/1000;
   if (state.running && !state.paused) {
     const e = input.takeEdges(); if (e.pause) pause(true); if (e.cam) state.cam = (state.cam + 1) % 3; if (e.lights) { state.lights = state.lights === null ? !(atmo.night > 0.35) : !state.lights; toast(state.lights ? 'Phares allumés' : 'Phares éteints', '', 1.2); } if (e.reset) { const sp = startPosNear(); player.reset(sp.x, sp.z, sp.yaw); toast('Remis sur la route', '', 1.4); } if (e.time) { const order = ['jour', 'soir', 'nuit']; const cur = atmo.elev > 0.2 ? 0 : atmo.elev > -0.08 ? 1 : 2; atmo.setPreset(order[(cur + 1) % 3]); toast('Moment : ' + order[(cur + 1) % 3], '', 1.4); }
