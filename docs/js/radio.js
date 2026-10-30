@@ -33,9 +33,15 @@ export class Radio {
       if (this.station !== id) return; this.queue = shuffle([...q]); this.i = -1; if (!this.queue.length) { this.status = 'Aucun morceau trouvé (vérifie ta connexion).'; this.on = false; this.onChange(); return; } this.next();
     } catch (e) { this.status = 'Pas de connexion : la radio a besoin d\'internet.'; this.on = false; this.onChange(); }
   }
-  next() { if (!this.on || !this.queue.length) return; this.i = (this.i + 1) % this.queue.length; this.audio.src = this.queue[this.i].url; this.audio.volume = 0; const p = this.audio.play(); if (p && p.catch) p.catch(() => {}); this.onChange(); }
+  /** À appeler DIRECTEMENT dans le clic/toucher : iOS et Android n'autorisent le son que si lecture démarrée par un geste (le chargement des morceaux, lui, est asynchrone). */
+  unlock() { if (this._unlocked) return; this._unlocked = true; const a = this.audio; a.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA='; a.muted = true; const p = a.play(); const done = () => { a.muted = false; }; if (p && p.then) p.then(done, done); else done(); }
+  _play() {
+    const p = this.audio.play(); if (!p || !p.catch) return;
+    p.catch(e => { if (!this.on || (e && e.name === 'AbortError')) return; this.status = 'Touche l’écran pour lancer la musique'; this.onChange(); const retry = () => { removeEventListener('pointerdown', retry, true); if (this.on) { this.status = ''; this._play(); this.onChange(); } }; addEventListener('pointerdown', retry, true); });
+  }
+  next() { if (!this.on || !this.queue.length) return; this.i = (this.i + 1) % this.queue.length; this.audio.muted = false; this.audio.src = this.queue[this.i].url; this.audio.volume = 0; this._play(); this.onChange(); }
   get track() { return this.on && this.i >= 0 ? this.queue[this.i] : null; }
   setVolume(v) { this.vol = Math.max(0, Math.min(1, v)); this.audio.volume = this.vol; }
-  pause(on) { if (!this.on) return; if (on) this.audio.pause(); else { const p = this.audio.play(); if (p && p.catch) p.catch(() => {}); } }
+  pause(on) { if (!this.on) return; if (on) this.audio.pause(); else this._play(); }
   stop(keepStatus) { this.on = false; this.station = null; this.audio.pause(); if (!keepStatus) this.status = ''; this.onChange(); }
 }

@@ -135,7 +135,7 @@ export class Traffic {
   setNight(k) { this.night = k; const f = 0.9 + 0.9*k; for (const kn of KINDS) { const I = this.inst[kn]; if (I.front) I.front.material.color.setScalar(0.55 + 1.5*k); } }
   update(dt, night, camera) {
     if (!this.on) return; this.step(Math.min(dt, 0.1)); this.cam = camera; const cx = this.player.x, cz = this.player.z, R2 = this.renderR*this.renderR;
-    for (const k of KINDS) this.inst[k].n = 0; let shown = 0;
+    this.S1.setScalar(this.scale || 1); for (const k of KINDS) this.inst[k].n = 0; let shown = 0;
     for (const ag of this.agents) {
       if (!ag.piece) continue; const dx = ag.x - cx, dz = ag.z - cz; if (dx*dx + dz*dz > R2) continue;
       const I = this.inst[ag.kind]; if (I.n >= this.cap) continue; const i = I.n++; shown++;
@@ -151,6 +151,10 @@ export class Traffic {
     for (const k of KINDS) { const I = this.inst[k], n = I.n, nw = this.models.kinds[k].wheels.length; for (const p of ['body', 'detail', 'front', 'rear', 'sign']) if (I[p]) { I[p].count = n; I[p].instanceMatrix.needsUpdate = true; } I.wheels.count = n*nw; I.wheels.instanceMatrix.needsUpdate = true; if (I.body.instanceColor) I.body.instanceColor.needsUpdate = true; }
     this.shown = shown; this._signals(dt); this._furniture(dt); this._renderPeds(dt);
   }
+  /** Exploration 3D : la circulation suit le point regardé (focus = {x, z, y, len, vf, yaw}) ; les véhicules sont agrandis avec l'altitude pour rester visibles. */
+  beginExplore(focus) { this._pl = this.player; this._dens = this.density; this.renderR = 700; this.scale = 1; this.start({ x: focus.x, z: focus.z }, this.density, focus); }
+  endExplore(player) { this.renderR = 360; this.scale = 1; this.S1.setScalar(1); if (player) this.start({ x: player.x, z: player.z }, this._dens ?? this.density, player); else { this.on = false; this.hide(); } }
+  hide() { for (const k of KINDS) { const I = this.inst[k]; for (const p of ['body', 'detail', 'front', 'rear', 'sign', 'wheels']) if (I[p]) I[p].count = 0; I.n = 0; } }
   nearPositions(R) { const out = [], cx = this.player.x, cz = this.player.z, R2 = R*R; for (const a of this.agents) if (a.piece && (a.x - cx)**2 + (a.z - cz)**2 < R2) out.push([a.x, a.z]); return out; }
   // ---------- player collisions ----------
   collidePlayer(p, dt) {

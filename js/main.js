@@ -290,8 +290,8 @@ function startPosNear() { const n = graph.nearest(player.x, player.z, 80, e => e
 const radio = new Radio();
 async function setupRadio() {
   const list = $('radioList'), now = $('radioNow'); const render = () => { [...list.children].forEach(b => b.classList.toggle('on', radio.on && radio.station === b.dataset.id)); const t = radio.track; now.textContent = radio.status || (t ? '♪ ' + t.title + ' — ' + t.artist : 'Radio éteinte'); $('hudRadio').textContent = radio.on ? '📻 ♪' : '📻 Radio'; };
-  radio.onChange = render; for (const st of await radio.stations()) { const b = document.createElement('button'); b.textContent = st.name; b.dataset.id = st.id; b.onclick = () => { if (sound.start) sound.start(); radio.play(st.id); }; list.appendChild(b); }
-  $('hudRadio').onclick = () => $('radio').classList.toggle('hidden'); $('radioClose').onclick = () => $('radio').classList.add('hidden'); $('radioNext').onclick = () => radio.next(); $('radioOff').onclick = () => radio.stop(); $('radioVolIn').oninput = e => radio.setVolume(+e.target.value); render();
+  radio.onChange = render; for (const st of await radio.stations()) { const b = document.createElement('button'); b.textContent = st.name; b.dataset.id = st.id; b.onclick = () => { if (sound.start) sound.start(); radio.unlock(); radio.play(st.id); }; list.appendChild(b); }
+  $('hudRadio').onclick = () => $('radio').classList.toggle('hidden'); $('radioClose').onclick = () => $('radio').classList.add('hidden'); $('radioNext').onclick = () => { radio.unlock(); radio.next(); }; $('radioOff').onclick = () => radio.stop(); $('radioVolIn').oninput = e => radio.setVolume(+e.target.value); render();
 }
 // ---------------- 3D exploration: bird's-eye view of the city with signboards on the landmarks ----------------
 const EX = { on: false, tx: -200, tz: 200, ty: 20, dist: 1500, yaw: -0.5, pitch: 0.95, sel: -1, ptr: new Map(), pinch: null, labels: [], saved: null, labT: 0, fly: null, timeIdx: 0 };
@@ -313,14 +313,14 @@ function exSelect(i) { EX.sel = i; const l = LANDMARKS[i]; EX.labels.forEach((o,
 function startExplore() {
   if (!state.ready || EX.on) return; EX.on = true; state.running = false;
   EX.saved = { r: prof.tileRadius, far: atmo.fog.far, hours: atmo.hours, auto: atmo.auto }; prof.tileRadius = prof === PROFILES.low ? 1000 : 1500; atmo.fog.far = 9000; atmo.auto = false; const tm = sel.time === 'reel' ? modeOfHours(bamakoHours()) : sel.time; EX.timeIdx = tm === 'soir' ? 1 : tm === 'nuit' ? 2 : 0; atmo.setPreset(EX_TIMES[EX.timeIdx][0]); $('exTime').textContent = EX_TIMES[EX.timeIdx][1];
-  const pl = LANDMARKS[sel.place]; EX.tx = pl.x; EX.tz = pl.z; EX.dist = 1500; EX.pitch = 0.95; EX.sel = -1; EX.fly = null; $('exCard').classList.add('hidden'); EX.labels.forEach(l => l.el.classList.remove('on'));
+  const pl = LANDMARKS[sel.place]; EX.tx = pl.x; EX.tz = pl.z; EX.focus = { x: pl.x, z: pl.z, y: -1e6, len: 0, vf: 0, yaw: 0 }; if (traffic) traffic.beginExplore(EX.focus); EX.dist = 1500; EX.pitch = 0.95; EX.sel = -1; EX.fly = null; $('exCard').classList.add('hidden'); EX.labels.forEach(l => l.el.classList.remove('on'));
   $('menu').classList.add('hidden'); $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('explore').classList.remove('hidden'); camera.far = 9000; camera.fov = 55; camera.updateProjectionMatrix(); world.update(EX.tx, EX.tz, true);
   // orbit camera: 1 finger / left mouse = rotate, 2 fingers = pinch zoom + pan, wheel = zoom, right mouse = pan
   const g0 = world.ground(EX.tx, EX.tz, null) ?? 20; EX.ty = g0; camera.position.set(EX.tx - Math.cos(EX.yaw)*Math.cos(EX.pitch)*EX.dist, g0 + Math.sin(EX.pitch)*EX.dist, EX.tz - Math.sin(EX.yaw)*Math.cos(EX.pitch)*EX.dist);
   const c = EX.ctl = new OrbitControls(camera, $('exPad')); c.target.set(EX.tx, g0, EX.tz); c.enableDamping = true; c.dampingFactor = 0.09; c.rotateSpeed = 0.75; c.zoomSpeed = 1.1; c.panSpeed = 0.9; c.minDistance = 70; c.maxDistance = 3600; c.minPolarAngle = 0.12; c.maxPolarAngle = 1.46; c.screenSpacePanning = false; c.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }; c.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }; c.update();
 }
 function stopExplore(toGame) {
-  if (!EX.on) return; EX.on = false; if (EX.ctl) { EX.ctl.dispose(); EX.ctl = null; } $('explore').classList.add('hidden'); prof.tileRadius = EX.saved.r; atmo.fog.far = EX.saved.far; atmo.auto = EX.saved.auto; if (!toGame) atmo.hours = EX.saved.hours; camera.far = 6000; camera.fov = 64; camera.updateProjectionMatrix(); world.update(EX.tx, EX.tz, true);
+  if (!EX.on) return; EX.on = false; if (traffic) traffic.endExplore(toGame ? null : player); if (EX.ctl) { EX.ctl.dispose(); EX.ctl = null; } $('explore').classList.add('hidden'); prof.tileRadius = EX.saved.r; atmo.fog.far = EX.saved.far; atmo.auto = EX.saved.auto; if (!toGame) atmo.hours = EX.saved.hours; camera.far = 6000; camera.fov = 64; camera.updateProjectionMatrix(); world.update(EX.tx, EX.tz, true);
   if (!toGame) { $('menu').classList.remove('hidden'); if (player) $('backGame').classList.remove('hidden'); }
 }
 const _v = new THREE.Vector3(), _bf = new THREE.Vector3();
@@ -331,6 +331,7 @@ function exploreFrame(dt) {
   c.update(); const gc = world.ground(camera.position.x, camera.position.z, null); if (gc !== null && camera.position.y < gc + 25) camera.position.y = gc + 25;
   EX.tx = T.x; EX.tz = T.z; EX.ty = T.y; EX.dist = camera.position.distanceTo(T);
   world.update(EX.tx, EX.tz); atmo.update(dt, camera.position); atmo.sun.castShadow = false;
+  if (traffic && EX.focus) { EX.focus.x = T.x; EX.focus.z = T.z; traffic.scale = Math.max(1, Math.min(3.5, EX.dist/400)); traffic.setNight(atmo.night); traffic.update(dt, atmo.night, camera); }
   EX.labT -= dt; const refresh = EX.labT <= 0; if (refresh) EX.labT = 1; camera.updateMatrixWorld(); const W = innerWidth, H = innerHeight;
   LANDMARKS.forEach((l, i) => { const o = EX.labels[i]; if (refresh) { const gy = world.ground(l.x, l.z, null); if (gy !== null) o.y = gy + 55; }
     _v.set(l.x, o.y, l.z); const d = camera.position.distanceTo(_v); _v.project(camera); const vis = _v.z < 1 && _v.z > -1 && Math.abs(_v.x) < 1.08 && _v.y > -1.05 && _v.y < 1.1 && (i < MAJOR || d < 2800);
