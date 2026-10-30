@@ -340,6 +340,7 @@ function exploreFrame(dt) {
   const c = EX.ctl; if (!c) return; const T = c.target;
   if (EX.fly) { const k = 1 - Math.exp(-dt*4), dx = (EX.fly.x - T.x)*k, dz = (EX.fly.z - T.z)*k; T.x += dx; T.z += dz; camera.position.x += dx; camera.position.z += dz; _off.copy(camera.position).sub(T); const d = _off.length(), nd = d + (EX.fly.d - d)*k; camera.position.copy(T).addScaledVector(_off.normalize(), nd); if (Math.abs(EX.fly.x - T.x) + Math.abs(EX.fly.z - T.z) < 2) EX.fly = null; }
   const g = world.ground(T.x, T.z, null); if (g !== null) { const dy = (g - T.y)*Math.min(1, dt*3); T.y += dy; camera.position.y += dy; }
+  input.poll(dt);   // lit la manette (sticks / croix) même hors conduite
   { const L = input.look; if (L.on || L.zoom) { _off.copy(camera.position).sub(T); const sp = new THREE.Spherical().setFromVector3(_off); sp.theta -= L.x*dt*1.6; sp.phi = Math.max(0.12, Math.min(1.5, sp.phi + L.y*dt*0.9)); sp.radius = Math.max(60, Math.min(6000, sp.radius*(1 - L.zoom*dt*0.9))); camera.position.copy(T).add(_off.setFromSpherical(sp)); } }
   c.update(); const gc = world.ground(camera.position.x, camera.position.z, null); if (gc !== null && camera.position.y < gc + 25) camera.position.y = gc + 25;
   EX.tx = T.x; EX.tz = T.z; EX.ty = T.y; EX.dist = camera.position.distanceTo(T);
