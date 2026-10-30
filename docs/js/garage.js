@@ -21,12 +21,13 @@ export class Garage {
     if (!this.r) this.init();
     if (this.car) { this.stage.remove(this.car.root); this.car.bodyMat.dispose(); }
     const K = this.models.kinds[kind], cols = BODY_COLORS[kind]; this.car = new CarMesh(this.models, kind, cols[ci % cols.length]); this.car.root.rotation.set(0, 0, 0); this.stage.add(this.car.root); this.kind = kind;
-    const len = Math.max(K.len, 2.2), sc = len*0.62; this.disc.scale.set(sc, 1, sc); this.ring.scale.set(sc, sc, 1); this.len = len; this.fit();
+    const box = new THREE.Box3().setFromObject(this.car.root), sz = box.getSize(new THREE.Vector3());   // mesure réelle (la moto porte une grosse caisse)
+    const w = Math.max(sz.x, sz.z, 1.5); this.dim = { w, h: Math.max(sz.y, 1) }; const sc = w*0.62; this.disc.scale.set(sc, 1, sc); this.ring.scale.set(sc, sc, 1); this.fit();
   }
   fit() {
-    if (!this.r) return; const w = this.cv.clientWidth || 1, h = this.cv.clientHeight || 1; this.r.setSize(w, h, false); this.cam.aspect = w/h; this.cam.updateProjectionMatrix();
-    const t = Math.tan(this.cam.fov*Math.PI/360), len = this.len || 4, need = Math.max((len*0.78)/(t*this.cam.aspect), (len*0.32)/t); const dist = need + len*0.35;
-    this.cam.position.set(0, len*0.34 + 0.4, dist); this.cam.lookAt(0, len*0.12, 0); this._w = w; this._h = h;
+    if (!this.r || !this.dim) return; const w = this.cv.clientWidth || 1, h = this.cv.clientHeight || 1; this.r.setSize(w, h, false); this.cam.aspect = w/h; this.cam.updateProjectionMatrix();
+    const t = Math.tan(this.cam.fov*Math.PI/360), D = this.dim, dist = Math.max((D.h*1.9)/2/t, (D.w*1.5)/2/(t*this.cam.aspect)) + D.w*0.5;
+    this.cam.position.set(0, D.h*0.7 + 0.3, dist); this.cam.lookAt(0, D.h*0.42, 0); this._w = w; this._h = h;
   }
   start() { this.on = true; this.idle = 0; requestAnimationFrame(() => this.fit()); }
   stop() { this.on = false; }
