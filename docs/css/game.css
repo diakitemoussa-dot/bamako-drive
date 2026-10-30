@@ -83,3 +83,14 @@ body.touch #speedo { right:calc(250px + var(--safe-r)); bottom:calc(8px + var(--
 #steerZone { height:72%; width:50%; }
 /* phones: the buttons row sits under the Pause / Radio / Menu buttons instead of overlapping them */
 body.touch #sideBtns { top:calc(54px + var(--safe-t)); } @media (max-height:520px) { #sideBtns { top:calc(54px + var(--safe-t)); } body.touch #score { display:none; } }
+
+/* écran de chargement */
+#splash { position:fixed; inset:0; z-index:100; background:#2B2030; transition:opacity .6s; } #splash.out { opacity:0; pointer-events:none; }
+#splash img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+#splashShade { position:absolute; inset:0; background:linear-gradient(180deg, rgba(43,32,48,.62) 0%, rgba(43,32,48,0) 38%, rgba(43,32,48,0) 62%, rgba(43,32,48,.78) 100%); }
+#splashBox { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:max(4vh,18px) 24px max(5vh,22px); box-sizing:border-box; text-align:center; }
+#splashBox h1 { margin:0; font:800 clamp(34px,8vw,84px)/1 Rubik, sans-serif; letter-spacing:.04em; color:var(--cream); text-shadow:0 4px 18px rgba(43,32,48,.75); } #splashBox h1 span { color:var(--gold); }
+#splashBar { width:min(440px,78vw); height:8px; background:rgba(248,243,234,.28); border-radius:8px; overflow:hidden; } #splashFill { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--lilac),var(--gold)); border-radius:8px; transition:width .25s; }
+#splashTxt { margin-top:8px; font:600 14px Lato, sans-serif; color:var(--cream); text-shadow:0 2px 8px rgba(43,32,48,.9); }
+#splashBox > div:nth-child(2) { margin-top:auto; } #splashTxt { order:3; }
+@media (max-height:520px) { #splashBox h1 { font-size:34px; } }

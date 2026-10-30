@@ -275,11 +275,11 @@ function exploreFrame(dt) {
 
 // ---------------- boot ----------------
 (async function boot() {
-  input = new Input(document.body); if (input.isTouch) document.body.classList.add('touch'); sound = new Sound(); createRenderer(); setupScene(); setupLights(); const prog = (f, t) => { $('loadFill').style.width = Math.round(f*100) + '%'; $('loadTxt').textContent = t; };
+  input = new Input(document.body); if (input.isTouch) document.body.classList.add('touch'); sound = new Sound(); createRenderer(); setupScene(); setupLights(); const prog = (f, t) => { $('loadFill').style.width = $('splashFill').style.width = Math.round(f*100) + '%'; $('loadTxt').textContent = $('splashTxt').textContent = t; };
   prog(0.05, 'Chargement de la ville…'); await world.init(); prog(0.2, 'Chargement des véhicules…'); models = await new Models().load(); prog(0.4, 'Réseau routier…'); graph = await new Graph().load(); const river = await fetch('data/river.json').then(r => r.json()).catch(() => null); graph.renderMap(-2450, -2800, 4900, 5600, 5, river);
   prog(0.7, 'Circulation…'); try { const m = await import('./traffic.js'); traffic = new m.Traffic(scene, world, graph, models, prof); await traffic.init(); } catch (e) { console.warn('traffic unavailable', e); }
   bats = new Bats(scene, world, prof.bats || 150); setupBeacons();
-  buildMenu(); setupBigMap(); prog(1, 'Prêt'); $('play').disabled = false; $('exploreBtn').disabled = false; $('play').textContent = 'JOUER'; state.ready = true; requestAnimationFrame(frame);
+  buildMenu(); setupBigMap(); prog(1, 'Prêt'); $('play').disabled = false; $('exploreBtn').disabled = false; $('play').textContent = 'JOUER'; state.ready = true; requestAnimationFrame(frame); setTimeout(() => { $('splash').classList.add('out'); setTimeout(() => $('splash').remove(), 700); }, 900);
   window.__game = { get player() { return player; }, get atmo() { return atmo; }, get world() { return world; }, get traffic() { return traffic; }, get bats() { return bats; }, sel, state, begin, startExplore, stopExplore, EX, get camera() { return camera; } };
   if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
