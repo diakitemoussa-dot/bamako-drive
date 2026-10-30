@@ -1,6 +1,6 @@
 // Comptage des joueurs : un nom demandé une seule fois par appareil, puis +1 à chaque ouverture du jeu (une fois par session).
 // Les données vont dans un tableur Google (onglet « Joueurs ») via un script Google Apps Script (voir apps_script/).
-export const PLAYERS_API = '';   // URL de l'application Web Apps Script (…/exec) ; vide = fonction désactivée
+export const PLAYERS_API = 'https://script.google.com/macros/s/AKfycbzwF7B4fQWRVLMXsPo7QDE_d2DuS9dER80smMAdHHlgfPxf89pYzQDbD0OBw8OObFoP/exec';   // URL de l'application Web Apps Script (…/exec) ; vide = fonction désactivée
 
 const KEY = 'bd_player', SESSION = 'bd_counted';
 const store = { get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } }, set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch {} } };
