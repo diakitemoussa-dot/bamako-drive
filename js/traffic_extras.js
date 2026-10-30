@@ -77,19 +77,28 @@ export function install(T) {
     const xs = this.xwalks.filter(x => (x.x - cx)**2 + (x.z - cz)**2 < R*R); if (!xs.length) { this._pedWalk(pd, cx, cz, 20, 480); return; } const xw = xs[(Math.random()*xs.length) | 0];
     Object.assign(pd, { mode: 'wait', xw, side: Math.random() < 0.5 ? 1 : -1, wait: rnd(0, 12) }); pd.x = xw.x + xw.Rn[0]*5.3*pd.side; pd.z = xw.z + xw.Rn[1]*5.3*pd.side;
   };
+  P._pedHit = function (pd, pl) {   // le piéton est renversé : projeté dans le sens de la voiture, tombe, puis réapparaît plus loin après quelques secondes
+    const sp = pl.speed; Object.assign(pd, { mode: 'hit', hitT: 0, fall: 0, fy: 0, moving: false, vy: 2.4 + Math.min(sp, 25)*0.17, vx: pl.vx*0.9 + (Math.random() - 0.5)*1.4, vz: pl.vz*0.9 + (Math.random() - 0.5)*1.4, head: Math.atan2(pl.vz, pl.vx) + Math.PI });
+    pl.vx *= 0.94; pl.vz *= 0.94; if (this.onPedHit) this.onPedHit(sp);
+  };
   P._stepPeds = function (dt) {
     const pl = this.player, R2 = (this.renderR + 60)**2; this._pedT = (this._pedT || 0) + dt;
     for (const pd of this.peds) { if (pd.mode === 'off') continue; let moving = false;
+      if (pd.mode === 'hit') { pd.hitT += dt; pd.x += pd.vx*dt; pd.z += pd.vz*dt; const fr = Math.exp(-dt*(pd.fy > 0.02 ? 0.5 : 3.5)); pd.vx *= fr; pd.vz *= fr; pd.fy += pd.vy*dt; pd.vy -= 11*dt; if (pd.fy <= 0) { pd.fy = 0; pd.vy = pd.vy < -3 ? -pd.vy*0.2 : 0; } pd.fall = Math.min(1.5, pd.fall + dt*3.4); pd.moving = false;
+        if (pd.hitT > 4.5) { pd.mode = 'off'; pd.fy = 0; pd.fall = 0; this._pedWalk(pd, pl.x, pl.z, this.renderR*0.5, this.renderR + 80); } continue; }
       if (pd.mode === 'walk') { const E = pd.edge; let s = pd.s + pd.dirn*pd.speed*dt; if (s > pd.hi) { s = pd.hi; pd.dirn = -1; } else if (s < pd.lo) { s = pd.lo; pd.dirn = 1; } pd.s = s; const q = E.at(s); pd.x = q.x + Math.sin(q.ang)*pd.off; pd.z = q.z - Math.cos(q.ang)*pd.off; pd.head = pd.dirn > 0 ? q.ang : q.ang + Math.PI; moving = true; }
       else { const xw = pd.xw; if (pd.mode === 'wait') { pd.wait -= dt; pd.head = Math.atan2(-xw.Rn[1]*pd.side, -xw.Rn[0]*pd.side); if (pd.wait <= 0 && this.sigState(xw.node, xw.phase) === 'R' && this.sigState(xw.node, xw.phase, 7.5) === 'R') { pd.mode = 'cross'; pd.prog = 0; } }
         else { pd.prog += pd.speed*dt; const k = Math.min(pd.prog/10.6, 1); pd.x = xw.x + xw.Rn[0]*5.3*pd.side*(1 - 2*k); pd.z = xw.z + xw.Rn[1]*5.3*pd.side*(1 - 2*k); pd.head = Math.atan2(-xw.Rn[1]*pd.side, -xw.Rn[0]*pd.side); moving = true; if (k >= 1) { pd.mode = 'wait'; pd.side = -pd.side; pd.wait = rnd(6, 22); } } }
       pd.moving = moving; if (moving) pd.ph += pd.speed*dt*4.4;
+      if (pl.vx !== undefined && pl.speed > 1.0) { const ex = pd.x - pl.x, ez = pd.z - pl.z; if (ex*ex + ez*ez < 16) { const c = Math.cos(pl.yaw), sn = Math.sin(pl.yaw), fw = ex*c + ez*sn, lt = -ex*sn + ez*c; if (Math.abs(fw) < pl.len*0.5 + 0.2 && Math.abs(lt) < (pl.wid || 1.9)*0.5 + 0.25 && Math.abs(pd.y - pl.y) < 2.2) this._pedHit(pd, pl); } }
       const dx = pd.x - pl.x, dz = pd.z - pl.z; if (dx*dx + dz*dz > R2*1.6 && pd.mode === 'walk') { if (Math.random() < 0.02) this._pedWalk(pd, pl.x, pl.z, this.renderR*0.5, this.renderR + 80); } }
   };
   P._renderPeds = function (dt) {
     const pl = this.player, pm = this.pm; if (!pm) return; const R2 = this.renderR**2, M = new THREE.Matrix4(), M2 = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3(1, 1, 1), E = new THREE.Euler(), C = new THREE.Color(); let n = 0;
     for (const pd of this.peds) { if (pd.mode === 'off' || n >= pm.cap) continue; const dx = pd.x - pl.x, dz = pd.z - pl.z; if (dx*dx + dz*dz > R2) continue; const gy = this.world.ground(pd.x, pd.z, pd.mode === 'cross' ? pl.y : null); if (gy === null) continue;
-      pd.y += ((gy + 0.1) - pd.y)*Math.min(1, dt*10) + (Math.abs(gy + 0.1 - pd.y) > 1 ? gy + 0.1 - pd.y : 0); E.set(0, -pd.head, 0); Q.setFromEuler(E); const bob = pd.moving ? 0.03*Math.abs(Math.sin(pd.ph)) : 0; V.set(pd.x, pd.y + bob, pd.z); S.set(1, pd.h, 1); M.compose(V, Q, S);
+      pd.y += ((gy + 0.1) - pd.y)*Math.min(1, dt*10) + (Math.abs(gy + 0.1 - pd.y) > 1 ? gy + 0.1 - pd.y : 0); E.set(0, -pd.head, 0); Q.setFromEuler(E); let bob = pd.moving ? 0.03*Math.abs(Math.sin(pd.ph)) : 0;
+      if (pd.mode === 'hit') { Q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), pd.fall)); bob = pd.fy + Math.sin(pd.fall)*0.2; }
+      V.set(pd.x, pd.y + bob, pd.z); S.set(1, pd.h, 1); M.compose(V, Q, S);
       pm.body.setMatrixAt(n, M); pm.head.setMatrixAt(n, M); const sw = pd.moving ? 0.55*Math.sin(pd.ph) : 0;
       for (const [leg, off, sg] of [[pm.legL, -0.1, 1], [pm.legR, 0.1, -1]]) { E.set(0, 0, sg*sw); const q2 = new THREE.Quaternion().setFromEuler(E); V.set(0, 0.86*pd.h, off); M2.compose(V, q2, S.set(1, pd.h, 1)); M2.premultiply(M); leg.setMatrixAt(n, M2); }
       pm.body.setColorAt(n, C.setRGB(...pd.col)); pm.head.setColorAt(n, C.setRGB(...pd.skin)); pm.legL.setColorAt(n, C.setRGB(0.14, 0.15, 0.2)); pm.legR.setColorAt(n, C.setRGB(0.14, 0.15, 0.2)); n++; }
