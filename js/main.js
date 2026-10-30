@@ -171,7 +171,16 @@ async function begin() {
   if (sel.time === 'auto') { atmo.hours = 9.5; atmo.auto = true; } else { atmo.setPreset(sel.time); }
   atmo.update(0, new THREE.Vector3(sp.x, g, sp.z)); state.lights = null; state.score = 100; $('scoreVal').textContent = 100;
   if (traffic) traffic.start(sp, sel.traffic, player);
-  $('menu').classList.add('hidden'); $('backGame').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); sound.start(); toast('Bonne route !', 'good', 2.5);
+  $('menu').classList.add('hidden'); $('backGame').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); input.calibrateTilt(); sound.start(); toast('Bonne route !', 'good', 2.5);
+}
+async function setTilt(on) {
+  if (on) { const ok = await input.enableTilt(); if (!ok) { $('tilt').checked = false; $('btnTilt').classList.remove('on'); toast('Capteur d\'inclinaison indisponible sur cet appareil', 'bad', 3); return; } toast('📱 Volant activé : tiens le téléphone droit, puis tourne-le', 'good', 3); }
+  else { input.disableTilt(); const w = $('wheel'); if (w) w.style.transform = 'rotate(0deg)'; toast('Volant à l\'écran', '', 1.6); }
+  $('tilt').checked = on; $('btnTilt').classList.toggle('on', on); try { localStorage.setItem('tilt', on ? '1' : '0'); } catch (e) {}
+}
+function goFullscreen() {   // phones: fill the screen and lock landscape (when the browser allows it)
+  if (!input.isTouch) return; const el = document.documentElement; try { const f = el.requestFullscreen || el.webkitRequestFullscreen; if (f) { const p = f.call(el); if (p && p.catch) p.catch(() => {}); } } catch (e) {}
+  try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (e) {}
 }
 function pause(on) { if (!state.running) return; if (BM.open) closeMap(); state.paused = on; $('pause').classList.toggle('hidden', !on); if (on) { sound.horn(false); input.keys.clear(); const T = input.touch; T.gas = T.brake = 0; T.hand = false; T.steer = 0; T.active = false; input.ptr.clear(); } }
 function toMenu() { pause(false); state.running = false; $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('menu').classList.remove('hidden'); if (player) $('backGame').classList.remove('hidden'); sound.horn(false); }
@@ -181,11 +190,11 @@ function buildMenu() {
   const pl = $('placeList'); PLACES.forEach((p, i) => { const b = document.createElement('button'); b.textContent = p.name; if (i === sel.place) b.classList.add('on'); b.onclick = () => { sel.place = i; [...pl.children].forEach(c => c.classList.toggle('on', c === b)); }; pl.appendChild(b); });
   const chips = (id, key, attr, conv = v => v) => { const box = $(id); box.onclick = (e) => { const b = e.target.closest('button'); if (!b) return; sel[key] = conv(b.dataset[attr]); [...box.children].forEach(c => c.classList.toggle('on', c === b)); }; };
   chips('timeList', 'time', 't'); chips('trafficList', 'traffic', 'v', parseFloat); chips('qualList', 'quality', 'q');
-  $('play').onclick = async () => { $('play').disabled = true; $('play').textContent = 'Chargement…'; if (sel.quality !== 'auto' && PROFILES[sel.quality] !== prof) await applyQuality(PROFILES[sel.quality]); await begin(); $('play').textContent = 'JOUER'; $('play').disabled = false; };
-  $('resume').onclick = () => pause(false); $('toMenu').onclick = toMenu; $('backGame').onclick = backToGame; $('hudPause').onclick = () => pause(!state.paused); $('hudMenu').onclick = () => { pause(true); };
+  $('play').onclick = async () => { goFullscreen(); $('play').disabled = true; $('play').textContent = 'Chargement…'; if (sel.quality !== 'auto' && PROFILES[sel.quality] !== prof) await applyQuality(PROFILES[sel.quality]); await begin(); $('play').textContent = 'JOUER'; $('play').disabled = false; };
+  $('resume').onclick = () => { pause(false); input.calibrateTilt(); }; $('toMenu').onclick = toMenu; $('backGame').onclick = backToGame; $('hudPause').onclick = () => pause(!state.paused); $('hudMenu').onclick = () => { pause(true); };
   setupRadio(); $('exploreBtn').onclick = startExplore; setupExplore();
   $('fsBtn').onclick = () => { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el); };
-  if (input.isTouch) { $('helpPC').classList.add('hidden'); $('helpTouch').classList.remove('hidden'); if (typeof DeviceOrientationEvent !== 'undefined') $('tiltRow').classList.remove('hidden'); $('tilt').onchange = async (e) => { if (e.target.checked) { const ok = await input.enableTilt(); if (!ok) e.target.checked = false; } else input.tilt.on = false; }; }
+  if (input.isTouch) { $('helpPC').classList.add('hidden'); $('helpTouch').classList.remove('hidden'); if (typeof DeviceOrientationEvent !== 'undefined') $('tiltRow').classList.remove('hidden'); $('tilt').onchange = e => setTilt(e.target.checked); $('btnTilt').addEventListener('pointerdown', e => { e.preventDefault(); setTilt(!input.tilt.on); }); } else $('btnTilt').classList.add('hidden');
 }
 async function applyQuality(p) { prof = p; createRenderer(); const keep = { hours: atmo.hours, auto: atmo.auto }; while (scene.children.length) scene.remove(scene.children[0]); setupScene(); atmo.hours = keep.hours; atmo.auto = keep.auto; setupLights(); await world.init(); if (beaconGlow) { scene.add(beaconGlow); scene.add(beaconLight); } if (traffic) traffic.rebind(scene, world, prof); if (bats) { bats.max = prof.bats || 150; bats.rebind(scene, world); } if (player) scene.add(player.car.root); scene.add(camera); }
 
