@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { KINDS } from './vehicles.js';
 import { install } from './traffic_extras.js';
+import { installRules } from './traffic_rules.js';
 
 const MIX_BIG = { moto: 33, sedan: 17, taxi: 14, sotrama: 15, suv: 7, pickup: 5, truck: 4, tricycle: 3 };
 const MIX_SMALL = { moto: 52, sedan: 14, taxi: 8, sotrama: 4, suv: 4, pickup: 5, truck: 2, tricycle: 11 };
@@ -48,7 +49,7 @@ export class Traffic {
   // ---------- node access ----------
   ns(node) { let s = this.nodeState.get(node); if (!s) this.nodeState.set(node, s = { act: new Map() }); return s; }
   canEnter(ag, A, conn, B) {
-    const sgn = this.edgeSig.get(A.edge), st = this.ns(A.node);
+    const sgn = this.edgeSig.get(A.edge), st = this.ns(A.node); if (!this.ruleClear(ag, A)) return false;   // STOP / cédez le passage
     if (sgn) { const ls = this.sigState(sgn[0], sgn[1]); if (ls === 'R') return false; if (ls === 'A' && (A.b - ag.s) > ag.v*ag.v/7 + 1) return false; }
     for (const [k, rec] of st.act) { if (rec.n <= 0 || k === conn.key || rec.from === A.edge) continue; if (this.t - rec.t < 7 && this.conflict(conn, this.pieces.get(k))) return false; }
     for (const o of B.agents) if (o.s < B.a + 3.5 + ag.len) return false;
@@ -67,13 +68,17 @@ export class Traffic {
     if (sel.length === 2) { const pick = Ae.nl === 2 ? Ae.lane : (Math.random() < (['taxi', 'moto', 'sedan', 'suv'].includes(ag.kind) ? 0.45 : 0.75) ? 0 : 1); return sel[pick] ?? sel[0]; } return sel[0];
   }
   plan(ag) { while (ag.next.length < 2) { const last = ag.next.length ? ag.next[ag.next.length - 1] : ag.piece; if (last.edge === null) return; const ei = this.choose(last, ag); if (ei < 0) return; const B = this.edgePiece(ei); ag.next.push(this.connPiece(last, B), B); } }
+  /** sens du virage d'un tronçon de croisement : -1 gauche, +1 droite, 0 tout droit (angle croissant = vers la droite) */
+  turnOf(p) { if (p._turn === undefined) { let d = 0; if (p.conn) { d = p.at(p.b).ang - p.at(p.a).ang; d = Math.atan2(Math.sin(d), Math.cos(d)); } p._turn = Math.abs(d) < 0.4 ? 0 : d > 0 ? 1 : -1; } return p._turn; }
+  /** clignotant à afficher pour un véhicule : dans le virage, ou dans les 45 derniers mètres avant */
+  signalOf(ag) { const P = ag.piece; if (P.conn) return this.turnOf(P); const nx = ag.next[0]; return nx && nx.conn && P.b - ag.s < 45 ? this.turnOf(nx) : 0; }
   // ---------- spawn ----------
   start(center, density, player) {
     this.player = player; this.density = density; this.on = true; for (const a of this.agents) this.detach(a); this.agents.length = 0; this.nodeState.clear(); for (const p of this.pieces.values()) p.agents.length = 0;
     const n = Math.round(this.prof.traffic*density); for (let i = 0; i < n; i++) { const k = pickW(Math.random() < 0.55 ? MIX_BIG : MIX_SMALL), ag = this._newAgent(k); this.agents.push(ag); if (!this.place(ag, center.x, center.z, 30, 520, true)) this.detach(ag); }
     this.agents = this.agents.filter(a => a.piece); this.count = this.agents.length; this._initPeds(center);
   }
-  _newAgent(kind) { const K = this.models.kinds[kind], p = PAR[kind]; return { kind, K, len: K.len, a: p[0], b: p[1], T: p[2], s0: p[3], fv: rnd(p[4], p[5]), alat: p[6], piece: null, s: 0, v: 0, lat: 0, latT: 0, latTimer: rnd(1, 6), next: [], hold: null, stuck: 0, blocked: 0, vlT: 0, vlP: null, vcache: 99, wang: rnd(0, 6.28), steer: 0, roll: 0, pitch: 0, y: null, x: 0, z: 0, ang: 0, color: null, wheelR: K.wheels[0].r, slot: -1 }; }
+  _newAgent(kind) { const K = this.models.kinds[kind], p = PAR[kind]; return { kind, K, len: K.len, a: p[0], b: p[1], T: p[2], s0: p[3], fv: Math.min(rnd(p[4], p[5]), kind === 'moto' ? 1.05 : 1.0),   /* respect des limitations de vitesse */ alat: p[6], piece: null, s: 0, v: 0, lat: 0, latT: 0, latTimer: rnd(1, 6), next: [], hold: null, stuck: 0, blocked: 0, vlT: 0, vlP: null, vcache: 99, wang: rnd(0, 6.28), steer: 0, roll: 0, pitch: 0, y: null, x: 0, z: 0, ang: 0, color: null, wheelR: K.wheels[0].r, slot: -1 }; }
   detach(ag) { if (ag.piece) { const i = ag.piece.agents.indexOf(ag); if (i >= 0) ag.piece.agents.splice(i, 1); } if (ag.hold) this.release(ag); ag.piece = null; }
   place(ag, cx, cz, rmin, rmax, initial = false) {
     const g = this.g, cell = 24, r = Math.ceil(rmax/cell), ids = new Set(); const ci = Math.floor(cx/cell), cj = Math.floor(cz/cell);
@@ -96,17 +101,19 @@ export class Traffic {
     if (fwd > 0 && fwd < 38 && Math.abs(lat) < 1.4 && Math.abs(p.y - ag.yy) < 3) return [fwd - ag.len*0.5 - p.len*0.5, Math.max(0, p.vf*Math.cos(p.yaw - ag.ang))]; return null;
   }
   step(dt) {
-    this.t += dt; const pl = this.player;
+    this.t += dt; const pl = this.player; if (!this._rulesDone) this._buildRules();
     for (const ag of this.agents) {
       let P = ag.piece; if (!P) continue; if (!ag.next.length) this.plan(ag); if (!ag.next.length && P.edge !== null && P.b - ag.s < 6) { this.place(ag, pl.x, pl.z, 380, 520); continue; }
       let v0 = Math.min(P.limit*ag.fv, 33); if (ag.kind === 'moto') v0 = Math.max(v0, Math.min(P.limit*1.15, 20)*ag.fv/1.1);
       ag.vlT -= dt; if (ag.vlT <= 0 || ag.vlP !== P) { const k = ag.alat/2.4, H = 45; let vc = P.vAhead(ag.s, H, k), acc = P.b - ag.s; vc = Math.min(vc, Math.sqrt(0 + 1e9));
         for (const Q of ag.next) { if (acc > H) break; vc = Math.min(vc, Q.vAhead(Q.a, Math.min(Q.L - Q.a, H - acc), k) + 0*acc); if (Q.edge !== null) vc = Math.min(vc, Q.limit*ag.fv); acc += Q.b - Q.a; }
         const dEnd = Math.max(0, Math.min(P.b - ag.s, H)); ag.vcache = vc; ag.vlT = 0.2 + Math.random()*0.15; ag.vlP = P; }
-      const vlim = Math.min(v0, ag.vcache);
+      let vlim = Math.min(v0, ag.vcache);
       let lead = this.leader(ag), gap = null, vl = 0; if (lead) { gap = lead[0]; vl = lead[1]; }
       const pa = pl ? this.playerAhead(ag) : null; if (pa && (gap === null || pa[0] < gap)) { gap = pa[0]; vl = pa[1]; }
       if (P.edge !== null && ag.next.length >= 2) { const dist = P.b - ag.s, stopd = ag.v*ag.v/(2*ag.b) + 6; if (dist < stopd && !this.canEnter(ag, P, ag.next[0], ag.next[1])) { const g2 = dist - 1.5 - ag.len*0.5; if (gap === null || g2 < gap) { gap = g2; vl = 0; } } }
+      { const rg = this.ruleGate(ag, P, dt); if (rg) { if (rg.gap !== null && (gap === null || rg.gap < gap)) { gap = rg.gap; vl = 0; } if (rg.vcap !== null) vlim = Math.min(vlim, rg.vcap); } }   // STOP / cédez le passage
+      { const pg = this.pedAhead(ag); if (pg !== null && (gap === null || pg < gap)) { gap = Math.max(pg, 0.05); vl = 0; } }   // piéton devant
       const v = ag.v, aFree = ag.a*(1 - Math.pow(v/Math.max(vlim, 0.5), 4)); let a = aFree;
       if (gap !== null) { const sst = ag.s0 + Math.max(0, v*ag.T + v*(v - vl)/(2*Math.sqrt(ag.a*ag.b))); a = aFree - ag.a*Math.pow(sst/Math.max(gap, 0.3), 2); }
       a = Math.max(-9, Math.min(ag.a, a)); if (gap !== null && gap < 0.3) a = Math.max(a, -9);
@@ -137,12 +144,15 @@ export class Traffic {
       const cr = document.createElement('canvas'); cr.width = cr.height = 64; const gr = cr.getContext('2d'), rr = gr.createRadialGradient(32, 32, 1, 32, 32, 31); rr.addColorStop(0, 'rgba(255,120,100,1)'); rr.addColorStop(0.3, 'rgba(255,40,30,.7)'); rr.addColorStop(1, 'rgba(255,20,10,0)'); gr.fillStyle = rr; gr.fillRect(0, 0, 64, 64);
       const geo2 = new THREE.BufferGeometry(); this.rlPos = new Float32Array(cap*2*3); geo2.setAttribute('position', new THREE.BufferAttribute(this.rlPos, 3)); this.rlCol = new Float32Array(cap*2*3).fill(0.3); geo2.setAttribute('color', new THREE.BufferAttribute(this.rlCol, 3)); geo2.setDrawRange(0, 0);
       this.rl = new THREE.Points(geo2, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(cr), vertexColors: true, size: 1.5, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 })); this.rl.frustumCulled = false; this.scene.add(this.rl); this.objs.push(this.rl); }
+    { const cb = document.createElement('canvas'); cb.width = cb.height = 64; const gb = cb.getContext('2d'), rb = gb.createRadialGradient(32, 32, 1, 32, 32, 31); rb.addColorStop(0, 'rgba(255,225,120,1)'); rb.addColorStop(0.35, 'rgba(255,150,20,.95)'); rb.addColorStop(1, 'rgba(255,120,0,0)'); gb.fillStyle = rb; gb.fillRect(0, 0, 64, 64);
+      const geo3 = new THREE.BufferGeometry(); this.blPos = new Float32Array(cap*2*3); geo3.setAttribute('position', new THREE.BufferAttribute(this.blPos, 3)); geo3.setDrawRange(0, 0);
+      this.bl = new THREE.Points(geo3, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(cb), size: 0.75, sizeAttenuation: true, transparent: true, depthWrite: false })); this.bl.frustumCulled = false; this.scene.add(this.bl); this.objs.push(this.bl); }   // clignotants des véhicules IA
     this.M4 = new THREE.Matrix4(); this.M5 = new THREE.Matrix4(); this.Q = new THREE.Quaternion(); this.E = new THREE.Euler(0, 0, 0, 'YXZ'); this.V = new THREE.Vector3(); this.S1 = new THREE.Vector3(1, 1, 1); this.C = new THREE.Color();
   }
   setNight(k) { this.night = k; if (this.hl) this.hl.material.opacity = Math.min(1, k*1.15); if (this.rl) this.rl.material.opacity = Math.min(1, k*1.1); for (const kn of KINDS) { const I = this.inst[kn]; if (I && I.rearMat) I.rearMat.color.setRGB(0.3 + 1.3*k, 0.03 + 0.04*k, 0.02); } const f = 0.9 + 0.9*k; for (const kn of KINDS) { const I = this.inst[kn]; if (I.front) I.front.material.color.setScalar(0.55 + 3.2*k); } }
   update(dt, night, camera) {
     if (!this.on) return; this.step(Math.min(dt, 0.1)); this.cam = camera; const cx = this.player.x, cz = this.player.z, R2 = this.renderR*this.renderR;
-    this.S1.setScalar(this.scale || 1); for (const k of KINDS) this.inst[k].n = 0; let shown = 0; let hn = 0, rn = 0; const hlOn = this.night > 0.05 && this.hl; if (this.hl) this.hl.material.size = 2.6*(this.scale || 1); if (this.rl) this.rl.material.size = 1.5*(this.scale || 1);
+    this.S1.setScalar(this.scale || 1); for (const k of KINDS) this.inst[k].n = 0; let shown = 0; let hn = 0, rn = 0, bn = 0; const hlOn = this.night > 0.05 && this.hl; if (this.hl) this.hl.material.size = 2.6*(this.scale || 1); if (this.rl) this.rl.material.size = 1.5*(this.scale || 1);
     for (const ag of this.agents) {
       if (!ag.piece) continue; const dx = ag.x - cx, dz = ag.z - cz; if (dx*dx + dz*dz > R2) continue;
       const I = this.inst[ag.kind]; if (I.n >= this.cap) continue; const i = I.n++; shown++;
@@ -154,12 +164,15 @@ export class Traffic {
       this.E.set(ag.roll, -ag.ang, ag.pitch); this.Q.setFromEuler(this.E); this.V.set(ag.x, ag.y + 0.02, ag.z); this.M4.compose(this.V, this.Q, this.S1);
       if (hlOn) { const hw2 = ag.kind === 'moto' ? 0 : 0.6*(this.scale || 1), bx = f[0]*(ag.len*0.5 + 0.12), bz = f[1]*(ag.len*0.5 + 0.12), n2 = hw2 ? 2 : 1; for (let q = 0; q < n2; q++) { const sd = hw2 ? (q ? hw2 : -hw2) : 0, o = rn++*3; this.rlPos[o] = ag.x - bx - f[1]*sd; this.rlPos[o + 1] = ag.y + (ag.kind === 'truck' || ag.kind === 'sotrama' ? 0.95 : 0.7); this.rlPos[o + 2] = ag.z - bz + f[0]*sd; const v = 0.22 + 0.9*ag._br; this.rlCol[o] = this.rlCol[o + 1] = this.rlCol[o + 2] = v; } }
       if (hlOn) { const hw = ag.kind === 'moto' ? 0 : 0.55*(this.scale || 1), fx = f[0]*(ag.len*0.5 + 0.1), fz = f[1]*(ag.len*0.5 + 0.1), n = hw ? 2 : 1; for (let q = 0; q < n; q++) { const sd = hw ? (q ? hw : -hw) : 0, o = hn++*3; this.hlPos[o] = ag.x + fx - f[1]*sd; this.hlPos[o + 1] = ag.y + (ag.kind === 'truck' || ag.kind === 'sotrama' ? 0.9 : 0.65); this.hlPos[o + 2] = ag.z + fz + f[0]*sd; } }
+      { const sg = this.signalOf(ag); if (sg) { if (ag._bo === undefined) ag._bo = Math.random(); if (((this.t*1.6 + ag._bo) % 1) < 0.5) { const sc = this.scale || 1, lat = (ag.kind === 'moto' ? 0.3 : ag.kind === 'truck' ? 1.0 : ag.kind === 'sotrama' ? 0.9 : 0.78)*sc*sg, hy = ag.y + (ag.kind === 'truck' ? 1.0 : ag.kind === 'sotrama' ? 0.95 : 0.78);
+          for (const fo of [ag.len*0.5, -ag.len*0.5]) { const o = bn++*3; this.blPos[o] = ag.x + f[0]*fo - f[1]*lat; this.blPos[o + 1] = hy; this.blPos[o + 2] = ag.z + f[1]*fo + f[0]*lat; } } } }
       if (I.rear && I.rear.instanceColor) { const vr = 0.3 + 0.7*ag._br; I.rear.instanceColor.setXYZ(i, vr, vr, vr); }
       I.body.setMatrixAt(i, this.M4); I.detail.setMatrixAt(i, this.M4); if (I.front) I.front.setMatrixAt(i, this.M4); if (I.rear) I.rear.setMatrixAt(i, this.M4); if (I.sign) I.sign.setMatrixAt(i, this.M4);
       if (!ag.color) ag.color = ag.K.colors[(Math.random()*ag.K.colors.length) | 0]; I.body.instanceColor.setXYZ(i, ag.color[0], ag.color[1], ag.color[2]);
       const nw = ag.K.wheels.length; for (let w = 0; w < nw; w++) { const W = ag.K.wheels[w]; this.E.set(0, W.front && ag.kind !== 'moto' ? -ag.steer : 0, -ag.wang); this.Q.setFromEuler(this.E); this.V.set(W.x, W.y, W.z); this.M5.compose(this.V, this.Q, this.S1); this.M5.premultiply(this.M4); I.wheels.setMatrixAt(i*nw + w, this.M5); }
     }
     if (this.hl) { this.hl.geometry.setDrawRange(0, hn); this.hl.geometry.attributes.position.needsUpdate = true; }
+    if (this.bl) { this.bl.material.size = 0.75*(this.scale || 1); this.bl.geometry.setDrawRange(0, bn); this.bl.geometry.attributes.position.needsUpdate = true; }
     if (this.rl) { this.rl.geometry.setDrawRange(0, rn); this.rl.geometry.attributes.position.needsUpdate = true; this.rl.geometry.attributes.color.needsUpdate = true; }
     for (const kn of KINDS) { const R = this.inst[kn].rear; if (R && R.instanceColor) R.instanceColor.needsUpdate = true; }
     for (const k of KINDS) { const I = this.inst[k], n = I.n, nw = this.models.kinds[k].wheels.length; for (const p of ['body', 'detail', 'front', 'rear', 'sign']) if (I[p]) { I[p].count = n; I[p].instanceMatrix.needsUpdate = true; } I.wheels.count = n*nw; I.wheels.instanceMatrix.needsUpdate = true; if (I.body.instanceColor) I.body.instanceColor.needsUpdate = true; }
@@ -168,7 +181,7 @@ export class Traffic {
   /** Exploration 3D : la circulation suit le point regardé (focus = {x, z, y, len, vf, yaw}) ; les véhicules sont agrandis avec l'altitude pour rester visibles. */
   beginExplore(focus) { this._pl = this.player; this._dens = this.density; this.renderR = 700; this.scale = 1; this.start({ x: focus.x, z: focus.z }, this.density, focus); }
   endExplore(player) { this.renderR = 360; this.scale = 1; this.S1.setScalar(1); if (player) this.start({ x: player.x, z: player.z }, this._dens ?? this.density, player); else { this.on = false; this.hide(); } }
-  hide() { if (this.hl) this.hl.geometry.setDrawRange(0, 0); if (this.rl) this.rl.geometry.setDrawRange(0, 0); for (const k of KINDS) { const I = this.inst[k]; for (const p of ['body', 'detail', 'front', 'rear', 'sign', 'wheels']) if (I[p]) I[p].count = 0; I.n = 0; } }
+  hide() { if (this.bl) this.bl.geometry.setDrawRange(0, 0); if (this.hl) this.hl.geometry.setDrawRange(0, 0); if (this.rl) this.rl.geometry.setDrawRange(0, 0); for (const k of KINDS) { const I = this.inst[k]; for (const p of ['body', 'detail', 'front', 'rear', 'sign', 'wheels']) if (I[p]) I[p].count = 0; I.n = 0; } }
   nearPositions(R) { const out = [], cx = this.player.x, cz = this.player.z, R2 = R*R; for (const a of this.agents) if (a.piece && (a.x - cx)**2 + (a.z - cz)**2 < R2) out.push([a.x, a.z]); return out; }
   // ---------- player collisions ----------
   collidePlayer(p, dt) {
@@ -181,4 +194,4 @@ export class Traffic {
       if (rel > 2.5 && (ag.hitT || 0) < this.t - 0.8) { ag.hitT = this.t; p.onCrash && p.onCrash(rel); } }
   }
 }
-install(Traffic);
+install(Traffic); installRules(Traffic);

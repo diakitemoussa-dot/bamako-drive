@@ -13,6 +13,20 @@ def is_skipped(o):
     if n.startswith(("V0", "P0", "TL_", "Terrain_envelope")) or n.endswith(("_ax", "_leg")): return True
     if any(c.name == "Trafic_Anime" for c in o.users_collection): return True
     return n.startswith(TREE_PREF)
+LANDMARKS = set(open("C:/Users/Kabakoo Apprenant.e/Documents/bamako_game/tools/export_g_landmarks.py", encoding="utf-8").read().split("LANDMARKS = [")[1].split("]")[0].replace('"', "").replace("\n", "").replace(" ", "").split(","))
+def linked_color(n, depth=0):
+    """couleur moyenne d'un nœud qui alimente la Base Color (Mix couleur, RGB, Mix Shader…) ; None si inconnue"""
+    if n is None or depth > 4: return None
+    if n.type == "RGB": return tuple(n.outputs[0].default_value[:3])
+    if n.type in ("MIX", "MIX_RGB"):
+        cols = []
+        for s in n.inputs:
+            if s.type == "RGBA" and s.enabled:
+                c = linked_color(s.links[0].from_node, depth + 1) if s.is_linked else tuple(s.default_value[:3])
+                if c is not None: cols.append(c)
+        if cols: return tuple(np.mean(np.array(cols, np.float32), 0))
+    if n.type == "VALTORGB": return tuple(np.mean([n.color_ramp.evaluate(t)[:3] for t in (0.25, 0.5, 0.75)], 0))
+    return None
 def mat_table(m):
     """-> (class, lut (256,3) or None, const rgb)"""
     nm = m.name; cls = CLS.get(nm, 5 if ("Verre" in nm or "Balcon" in nm) else 0)
@@ -26,6 +40,7 @@ def mat_table(m):
         if const is None:
             b = next((n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
             if b is not None and not b.inputs["Base Color"].is_linked: const = tuple(b.inputs["Base Color"].default_value[:3])
+            elif b is not None: const = linked_color(b.inputs["Base Color"].links[0].from_node)   # couleur venant d'un nœud Mix / RGB (motifs procéduraux)
     if const is None and lut is None: const = tuple(m.diffuse_color[:3])
     return cls, lut, const
 def srgb(c): return np.where(c <= 0.0031308, c*12.92, 1.055*np.power(np.maximum(c, 1e-6), 1/2.4) - 0.055)
@@ -54,6 +69,7 @@ for o in bpy.data.objects:
         if len(sel) == 0: continue
         if m.name not in matcache: matcache[m.name] = mat_table(m)
         cls, lut, const = matcache[m.name]
+        if cls == 0 and o.name in LANDMARKS: continue          # monument texturé : exporté par export_g_landmarks.py (data/landmarks.glb)
         P = co[tv[sel]]                                                  # (n,3,3) blender xyz
         T = np.stack([P[..., 0], P[..., 2], -P[..., 1]], axis=-1)        # -> three xyz (y up)
         if lut is not None and rnd is not None: base = lut[np.clip((trnd[sel]*255).astype(np.int32), 0, 255)]

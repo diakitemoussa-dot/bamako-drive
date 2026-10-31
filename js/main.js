@@ -11,6 +11,9 @@ import { PROFILES, detect, DynRes } from './quality.js';
 import { Sound } from './audio.js';
 import { Radio } from './radio.js';
 import { Bats } from './bats.js';
+import { Missions } from './missions/engine.js';
+import { Signal } from './signal.js';
+import { addLandmarks } from './landmarks.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const $ = id => document.getElementById(id);
@@ -24,7 +27,7 @@ const state = { running: false, paused: false, cam: 0, lights: null, hornT: 0, s
 
 // ---------------- renderer / scene ----------------
 let prof = PROFILES[detect()]; const urlQ = new URLSearchParams(location.search).get('q'); if (urlQ && PROFILES[urlQ]) prof = PROFILES[urlQ];
-let renderer, scene, camera, world, atmo, models, graph, player, input, sound, dyn, traffic = null, bats = null;
+let renderer, scene, camera, world, atmo, models, graph, player, input, sound, dyn, traffic = null, bats = null, missions = null, signal = null;
 function createRenderer() {
   if (renderer) renderer.dispose();
   renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: prof.antialias, powerPreference: 'high-performance', alpha: false });
@@ -32,7 +35,7 @@ function createRenderer() {
 }
 function setupScene() {
   scene = new THREE.Scene(); camera = new THREE.PerspectiveCamera(64, innerWidth/innerHeight, 0.4, 6000); scene.add(camera);
-  world = new World(scene, prof); atmo = new Atmosphere(scene, renderer, prof); dyn = new DynRes(renderer, prof.pixelRatio);
+  world = new World(scene, prof); addLandmarks(scene, prof); atmo = new Atmosphere(scene, renderer, prof); dyn = new DynRes(renderer, prof.pixelRatio);
 }
 addEventListener('resize', () => { if (!renderer) return; renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); checkOrientation(); });
 function checkOrientation() { const portrait = innerHeight > innerWidth*1.05 && input && input.isTouch; $('rotate').classList.toggle('hidden', !portrait); }
@@ -121,6 +124,7 @@ function drawMap() {
   const c = $('minimap'); if (!mapCtx) mapCtx = c.getContext('2d'); const g = mapCtx, W = c.width, [x0, z0, sc] = graph.mapOrg, R = 360/2; g.save(); g.clearRect(0, 0, W, W); g.beginPath(); g.arc(R, R, R, 0, Math.PI*2); g.clip(); g.fillStyle = '#3b2c42'; g.fillRect(0, 0, W, W);
   const zoom = 1.4/ (1 + Math.min(player.speed, 40)*0.01); g.translate(R, R*1.25); g.rotate(-player.yaw - Math.PI/2); g.scale(zoom, zoom); g.drawImage(graph.mapCanvas, -(player.x - x0)/sc, -(player.z - z0)/sc);
   if (traffic) { g.fillStyle = 'rgba(248,243,234,.85)'; for (const p of traffic.nearPositions(260)) g.fillRect((p[0] - player.x)/sc - 1, (p[1] - player.z)/sc - 1, 2.2, 2.2); }
+  if (missions) missions.drawMini(g, sc);
   g.setTransform(1, 0, 0, 1, 0, 0); g.beginPath(); g.moveTo(R, R*1.25 - 13); g.lineTo(R + 9, R*1.25 + 10); g.lineTo(R, R*1.25 + 5); g.lineTo(R - 9, R*1.25 + 10); g.closePath(); g.fillStyle = '#F9D58B'; g.fill(); g.strokeStyle = '#55415D'; g.lineWidth = 3; g.stroke(); g.restore();
 }
 
@@ -158,6 +162,7 @@ function drawBigMap() {
     if (showAll || PLACES.includes(l)) { const w = g.measureText(l.name).width; g.fillStyle = 'rgba(85,65,93,.85)'; g.beginPath(); g.roundRect(sx + 9*d, sy - 10*d, w + 12*d, 20*d, 8*d); g.fill(); g.fillStyle = '#F8F3EA'; g.fillText(l.name, sx + 15*d, sy + 1*d); } }
   // other vehicles
   if (traffic && BM.z > 0.12) { g.fillStyle = 'rgba(248,243,234,.8)'; for (const p of traffic.nearPositions(700)) { const [sx, sy] = S(p[0], p[1]); g.fillRect(sx - d, sy - d, 2*d, 2*d); } }
+  if (missions) missions.drawBig(g, S, d);
   // me
   const [px, py] = S(player.x, player.z); g.save(); g.translate(px, py); g.rotate(player.yaw + Math.PI/2); g.fillStyle = '#F9D58B'; g.strokeStyle = '#55415D'; g.lineWidth = 3*d; g.beginPath(); g.moveTo(0, -13*d); g.lineTo(9*d, 10*d); g.lineTo(0, 5*d); g.lineTo(-9*d, 10*d); g.closePath(); g.fill(); g.stroke(); g.restore();
   g.fillStyle = 'rgba(85,65,93,.9)'; g.font = `700 ${Math.round(11*d)}px Lato, sans-serif`; g.fillStyle = '#F8F3EA'; g.textAlign = 'left';
@@ -181,11 +186,13 @@ async function begin() {
   const sp = startPos(); world.update(sp.x, sp.z, true);
   await new Promise(res => { const t0 = performance.now(); const chk = () => { const loaded = world.tiles.size, want = Math.min(4, world.index.size); if ((world.tileAt(sp.x, sp.z) && world.loading.size === 0) || performance.now() - t0 > 12000) res(); else setTimeout(chk, 80); }; chk(); });
   if (player) { scene.remove(player.car.root); }
-  const cols = models.kinds[sel.car].colors, color = cols[sel.ci % cols.length]; const g = world.ground(sp.x, sp.z, null) ?? 20; player = new Player(models, world, sel.car, color, { x: sp.x, y: g, z: sp.z }, sp.yaw); scene.add(player.car.root); player.onCrash = (v) => { shake = Math.min(0.6, v*0.04); sound.crash(v); penalty(Math.min(8, Math.round(v*0.6)), 'Collision'); };
+  const cols = models.kinds[sel.car].colors, color = cols[sel.ci % cols.length]; const g = world.ground(sp.x, sp.z, null) ?? 20; player = new Player(models, world, sel.car, color, { x: sp.x, y: g, z: sp.z }, sp.yaw); scene.add(player.car.root); player.onCrash = (v) => { shake = Math.min(0.6, v*0.04); sound.crash(v); penalty(Math.min(8, Math.round(v*0.6)), 'Collision'); if (missions) missions.onCrash(v); };
   player.car.setPose(sp.x, g, sp.z, sp.yaw, 0, 0); camPos.set(sp.x - Math.cos(sp.yaw)*8, g + 4, sp.z - Math.sin(sp.yaw)*8); camLook.set(sp.x, g + 1, sp.z); camYaw = sp.yaw;
   if (sel.time === 'auto') { atmo.hours = 9.5; atmo.auto = true; } else if (sel.time === 'reel') { atmo.hours = bamakoHours(); atmo.auto = false; } else { atmo.setPreset(sel.time); }
   atmo.update(0, new THREE.Vector3(sp.x, g, sp.z)); state.lights = null; state.score = 100; $('scoreVal').textContent = 100;
   if (traffic) traffic.start(sp, sel.traffic, player);
+  if (!missions) missions = new Missions({ scene, world, graph, landmarks: LANDMARKS, toast }); missions.attach(player, sel.car); if (!signal) signal = new Signal(sound); signal.attach(player.car, sel.car);
+  if (new URLSearchParams(location.search).has('debug')) window.__bd = { input, missions, player, state, graph, world, traffic };
   $('menu').classList.add('hidden'); $('backGame').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); input.calibrateTilt(); sound.start(); toast('Bonne route !', 'good', 2.5);
 }
 async function setTilt(on) {
@@ -205,8 +212,8 @@ function setupEntryFullscreen() {   // dès le premier toucher (le navigateur ex
   if (ios && !seen) { const t = document.createElement('div'); t.id = 'iosTip'; t.innerHTML = '<span>Pour jouer en plein écran : touche <b>Partager</b> puis <b>Sur l\u2019écran d\u2019accueil</b>, et lance le jeu depuis cette icône.</span><button aria-label="Fermer">\u2715</button>'; t.querySelector('button').onclick = () => { t.remove(); try { localStorage.setItem('bd_ios_tip', '1'); } catch (e) {} }; document.body.appendChild(t); }
 }
 function pause(on) { if (!state.running) return; if (BM.open) closeMap(); state.paused = on; $('pause').classList.toggle('hidden', !on); if (on) { sound.horn(false); input.keys.clear(); const T = input.touch; T.gas = T.brake = 0; T.hand = false; T.steer = 0; T.active = false; input.ptr.clear(); } }
-function toMenu() { pause(false); state.running = false; $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('menu').classList.remove('hidden'); showView('home'); if (player) $('backGame').classList.remove('hidden'); sound.horn(false); }
-function backToGame() { if (!player) return; showView('home'); $('menu').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); }
+function toMenu() { pause(false); if (missions) missions.ui.card.style.visibility = 'hidden'; state.running = false; $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('menu').classList.remove('hidden'); showView('home'); if (player) $('backGame').classList.remove('hidden'); sound.horn(false); }
+function backToGame() { if (!player) return; if (missions) missions.ui.card.style.visibility = ''; showView('home'); $('menu').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); }
 
 // ---------------- parcours : accueil → garage → moment → départ ----------------
 const BLURB = { taxi: 'Le jaune de Bamako, partout, tout le temps.', sedan: 'Confortable et stable sur les grands boulevards.', suv: 'Haut sur roues, il passe partout.', pickup: 'Une grande benne pour tout transporter.', sotrama: 'Le minibus vert, toujours plein de monde.', truck: 'Lent, lourd, impressionnant.', moto: 'Agile, parfaite pour se faufiler dans la ville.', tricycle: 'Le petit utilitaire des quartiers.' };
@@ -340,7 +347,8 @@ function frame(now) {
   shared.uTime.value = now/1000;
   if (state.running && !state.paused) {
     const e = input.takeEdges(); if (e.pause) pause(true); if (e.cam) state.cam = (state.cam + 1) % 3; if (e.lights) { state.lights = state.lights === null ? !(lightK() > 0.35) : !state.lights; toast(state.lights ? 'Phares allumés' : 'Phares éteints', '', 1.2); } if (e.reset) { const sp = startPosNear(); player.reset(sp.x, sp.z, sp.yaw); toast('Remis sur la route', '', 1.4); } if (e.time) { const order = ['jour', 'soir', 'nuit']; const cur = atmo.elev > 0.2 ? 0 : atmo.elev > -0.08 ? 1 : 2; atmo.setPreset(order[(cur + 1) % 3]); toast('Moment : ' + order[(cur + 1) % 3], '', 1.4); }
-    const inp = input.poll(dt); player.world.night = lightK(); player.update(dt, inp, traffic); world.update(player.x, player.z); player.hornT = inp.horn ? 1 : 0;
+    if (signal) { if (e.sigL) signal.toggle(-1); if (e.sigR) signal.toggle(1); }
+    const inp = input.poll(dt); if (signal) signal.update(dt, inp.steer, player.speed); if (missions) missions.update(dt, inp, { kmh: Math.round(player.speed*3.6), limit: curLimit }); player.world.night = lightK(); player.update(dt, inp, traffic); world.update(player.x, player.z); player.hornT = inp.horn ? 1 : 0;
     const horn = e.horn || input.keys.has('KeyH'); sound.horn(horn); if (horn) state.honk = 1;
     atmo.update(dt, camera.position.lengthSq() ? camera.position : player.car.root.position); updateNightLights(dt); updateCamera(dt); if (traffic) traffic.update(dt, lightK(), camera); updateHud(dt);
     sound.update(player.speed, player.rpm, inp.throttle, player.drift, atmo.night); atmo.shadowR = prof.shadowR; shadowAt(player.car.root.position);
@@ -417,7 +425,7 @@ function exploreFrame(dt) {
 (async function boot() {
   input = new Input(document.body); if (input.isTouch) document.body.classList.add('touch'); setupEntryFullscreen(); checkOrientation(); sound = new Sound(); createRenderer(); setupScene(); setupLights(); const prog = (f, t) => { $('loadFill').style.width = $('splashFill').style.width = Math.round(f*100) + '%'; $('loadTxt').textContent = $('splashTxt').textContent = t; };
   prog(0.05, 'Chargement de la ville…'); await world.init(); prog(0.2, 'Chargement des véhicules…'); models = await new Models().load(); prog(0.4, 'Réseau routier…'); graph = await new Graph().load(); const river = await fetch('data/river.json').then(r => r.json()).catch(() => null); graph.renderMap(-2450, -2800, 4900, 5600, 5, river);
-  prog(0.7, 'Circulation…'); try { const m = await import('./traffic.js'); traffic = new m.Traffic(scene, world, graph, models, prof); await traffic.init(); traffic.onPedHit = () => penalty(20, 'Piéton renversé'); } catch (e) { console.warn('traffic unavailable', e); }
+  prog(0.7, 'Circulation…'); try { const m = await import('./traffic.js'); traffic = new m.Traffic(scene, world, graph, models, prof); await traffic.init(); traffic.onPedHit = () => { penalty(20, 'Piéton renversé'); if (missions) missions.onPedHit(); }; } catch (e) { console.warn('traffic unavailable', e); }
   bats = new Bats(scene, world, prof.bats || 150); setupBeacons();
   buildMenu(); setupBigMap(); prog(1, 'Prêt'); $('play').disabled = false; $('exploreBtn').disabled = false; $('play').textContent = 'JOUER'; state.ready = true; requestAnimationFrame(frame); setTimeout(() => { $('splash').classList.add('out'); setTimeout(() => $('splash').remove(), 700); startPlayers(); }, 900);
   window.__game = { get player() { return player; }, get atmo() { return atmo; }, get world() { return world; }, get traffic() { return traffic; }, get bats() { return bats; }, sel, state, begin, startExplore, stopExplore, EX, get camera() { return camera; } };

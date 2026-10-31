@@ -2,3 +2,6 @@ node_modules/
 dist/
 *.log
 .playwright-mcp/
+data/landmarks/
+data/qa_report.json
+data/*_avant_bord.json

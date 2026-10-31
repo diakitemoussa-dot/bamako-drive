@@ -91,5 +91,23 @@ if fence:
                 p = t[0] + a*(t[1] - t[0]) + b*(t[2] - t[0]); ix = int((p[0] - TX0)/GS); iz = int((-p[1] - TZ0)/GS)
                 if 0 <= ix < SX and 0 <= iz < SZ and not roadlow[ix, iz]: solid[ix, iz] = True; nf += 1
     print("fence solid samples:", nf)
+# couloir libre le long des voies au sol (réseau du jeu) : jamais de mur invisible à moins de 1 m de l'axe d'une voie
+import json, gzip, struct
+try:
+    G_ = json.load(open("C:/Users/Kabakoo Apprenant.e/Documents/bamako_game/data/graph.json")); rb_ = gzip.decompress(open("C:/Users/Kabakoo Apprenant.e/Documents/bamako_game/data/graph_pts.bin.gz", "rb").read())
+    np_ = struct.unpack("<I", rb_[:4])[0]; P_ = np.frombuffer(rb_[4:4 + np_*8], np.float32).reshape(-1, 2); carved = 0
+    for e_ in G_["edges"]:
+        if e_[8] < 1 or e_[9] != 0: continue
+        pts_ = P_[e_[13]:e_[13] + e_[14]]
+        for a_, b_ in zip(pts_[:-1], pts_[1:]):
+            k_ = max(1, int(np.hypot(*(b_ - a_))/1.0))
+            for t_ in np.linspace(0, 1, k_ + 1):
+                x_, z_ = a_ + (b_ - a_)*t_
+                for ox_ in (-1.0, 0.0, 1.0):
+                    for oz_ in (-1.0, 0.0, 1.0):
+                        ix_ = int((x_ + ox_ - TX0)/GS); iz_ = int((z_ + oz_ - TZ0)/GS)
+                        if 0 <= ix_ < SX and 0 <= iz_ < SZ and solid[ix_, iz_]: solid[ix_, iz_] = False; carved += 1
+    print("cellules dégagées le long des voies:", carved)
+except Exception as ex_: print("couloir des voies non calculé:", ex_)
 print("solid objects:", nb, "| solid cells:", int(solid.sum()), "of", solid.size, "|", round(time.time() - t0, 1), "s")
 bpy.app.driver_namespace["game_grids"] = {"h0": h0, "h1": h1, "solid": solid}

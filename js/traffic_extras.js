@@ -42,11 +42,15 @@ export function install(T) {
     const put = (mesh, i, x, y, z, sx, sy, sz, ry) => { E.set(0, ry, 0); Q.setFromEuler(E); V.set(x, y, z); S.set(sx, sy, sz); M.compose(V, Q, S); mesh.setMatrixAt(i, M); };
     for (const s of this.g.signals) { if ((s.x - p.x)**2 + (s.z - p.z)**2 > R2) continue;
       for (const a of s.approaches) { const T = a.T, ry = -Math.atan2(T[1], T[0]), Rn = [-T[1], T[0]], L = [T[1], -T[0]];     // R = right of travel, L = left
-        const bx = a.stop[0] + T[0]*1.2 + Rn[0]*2.5, bz = a.stop[1] + T[1]*1.2 + Rn[1]*2.5, gy = world.ground(bx, bz, null); if (gy === null || np >= 418) continue;
-        put(F.poles, np++, bx, gy + 2.8, bz, 0.22, 5.6, 0.22, ry); cols.push([bx, bz, 0.26, gy, gy + 5.6]); const reach = 2.5 + (a.nl === 2 ? 3.4 : 0) + 0.6; put(F.arms, na++, bx + L[0]*reach/2, gy + 5.45, bz + L[1]*reach/2, 0.14, 0.14, reach, -Math.atan2(L[1], L[0]));
+        const b0x = a.stop[0] + T[0]*1.2 + Rn[0]*2.5, b0z = a.stop[1] + T[1]*1.2 + Rn[1]*2.5;
+        const bx = a.pole ? a.pole[0] : b0x, bz = a.pole ? a.pole[1] : b0z, extra = a.pole ? Math.hypot(bx - b0x, bz - b0z) : 0;   // a.pole : poteau repoussé hors de la chaussée (route large)
+        const gy = world.ground(bx, bz, null); if (gy === null || np >= 418) continue;
+        put(F.poles, np++, bx, gy + 2.8, bz, 0.22, 5.6, 0.22, ry); cols.push([bx, bz, 0.26, gy, gy + 5.6]); const reach = 2.5 + extra + (a.nl === 2 ? 3.4 : 0) + 0.6; put(F.arms, na++, bx + L[0]*reach/2, gy + 5.45, bz + L[1]*reach/2, 0.14, 0.14, reach, -Math.atan2(L[1], L[0]));
         const heads = [[a.stop[0] + T[0]*1.2, a.stop[1] + T[1]*1.2]]; if (a.nl === 2) heads.push([a.stop[0] + T[0]*1.2 + L[0]*3.4, a.stop[1] + T[1]*1.2 + L[1]*3.4]);
         for (const h of heads) { if (nh >= 698) break; put(F.heads, nh++, h[0], gy + 4.75, h[1], 0.32, 1.05, 0.34, ry); for (let c = 0; c < 3 && nl < 2198; c++) { const lx = h[0] - T[0]*0.18, lz = h[1] - T[1]*0.18, ly = gy + 4.75 + [0.32, 0, -0.32][c]; put(F.lamps, nl, lx, ly, lz, 0.05, 0.22, 0.22, ry); F.lamps.setColorAt(nl, C.setRGB(0.05, 0.05, 0.05)); this.lampIdx.push({ i: nl, node: s.node, phase: a.phase, col: c, last: '' }); nl++; } }
         const Cc = a.C; for (let k = -3; k <= 3 && nz < 2398; k++) { const zx = Cc[0] - T[0]*2.4 + Rn[0]*k, zz = Cc[1] - T[1]*2.4 + Rn[1]*k, zy = world.ground(zx, zz, gy); if (zy === null) continue; put(F.zebra, nz++, zx, zy + 0.05, zz, 3.0, 0.04, 0.5, ry); } } }
+    // passages piétons sans feu (bandes blanches)
+    if (this.zebras) for (const zb of this.zebras) { if ((zb.x - p.x)**2 + (zb.z - p.z)**2 > R2) continue; const ry = -Math.atan2(zb.T[1], zb.T[0]); for (let k = -5; k <= 5 && nz < 2398; k++) { const zx = zb.x + zb.Rn[0]*k, zz = zb.z + zb.Rn[1]*k, zy = world.ground(zx, zz, null); if (zy === null) continue; put(F.zebra, nz++, zx, zy + 0.06, zz, 3.0, 0.04, 0.5, ry); } }
     // signs
     const counts = {}; let sp = 0; if (this.signList) for (const s of this.signList) { if ((s[0] - p.x)**2 + (s[1] - p.z)**2 > R2) continue; const gy = world.ground(s[0], s[1], null); if (gy === null) continue; const key = s[4] === 'speed' ? 'speed' + (s[5] === 40 || s[5] === 50 || s[5] === 60 ? s[5] : 50) : s[4] + 0; const m = F.signs[key]; if (!m) continue; const i = counts[key] || 0; if (i >= 498 || sp >= 1298) continue; counts[key] = i + 1;
       put(F.spoles, sp++, s[0], gy + 1.18, s[1], 0.08, 2.36, 0.08, 0); cols.push([s[0], s[1], 0.16, gy, gy + 2.4]); put(m, i, s[0] - s[2]*0.07, gy + 1.97, s[1] - s[3]*0.07, 1, 1, 1, Math.atan2(-s[2], -s[3])); }
@@ -64,6 +68,7 @@ export function install(T) {
   P._initPeds = function (c) {
     this.peds = []; const n = this.prof.peds, crossN = Math.round(n*0.28);
     this.xwalks = []; for (const s of this.g.signals) for (const a of s.approaches) { const T = a.T, Rn = [-T[1], T[0]]; this.xwalks.push({ node: s.node, phase: a.phase, x: a.C[0] - T[0]*2.4, z: a.C[1] - T[1]*2.4, Rn, T }); }
+    if (this.zebras) this.xwalks.push(...this.zebras);   // passages piétons sans feu
     for (let i = 0; i < n; i++) { const pd = { mode: 'off', x: 0, z: 0, y: 0, head: 0, speed: rnd(1.0, 1.6), ph: rnd(0, 6.28), col: PED_COLS[(Math.random()*PED_COLS.length) | 0], skin: SKIN[(Math.random()*SKIN.length) | 0], h: rnd(0.93, 1.08), edge: null, s: 0, lo: 0, hi: 1, dirn: 1, off: 2.9, wait: 0, prog: 0, side: 1, xw: null, vis: false };
       this.peds.push(pd); if (i < crossN) this._pedCross(pd, c.x, c.z, 520); else this._pedWalk(pd, c.x, c.z, 20, 480); }
   };
@@ -87,7 +92,7 @@ export function install(T) {
       if (pd.mode === 'hit') { pd.hitT += dt; pd.x += pd.vx*dt; pd.z += pd.vz*dt; const fr = Math.exp(-dt*(pd.fy > 0.02 ? 0.5 : 3.5)); pd.vx *= fr; pd.vz *= fr; pd.fy += pd.vy*dt; pd.vy -= 11*dt; if (pd.fy <= 0) { pd.fy = 0; pd.vy = pd.vy < -3 ? -pd.vy*0.2 : 0; } pd.fall = Math.min(1.5, pd.fall + dt*3.4); pd.moving = false;
         if (pd.hitT > 4.5) { pd.mode = 'off'; pd.fy = 0; pd.fall = 0; this._pedWalk(pd, pl.x, pl.z, this.renderR*0.5, this.renderR + 80); } continue; }
       if (pd.mode === 'walk') { const E = pd.edge; let s = pd.s + pd.dirn*pd.speed*dt; if (s > pd.hi) { s = pd.hi; pd.dirn = -1; } else if (s < pd.lo) { s = pd.lo; pd.dirn = 1; } pd.s = s; const q = E.at(s); pd.x = q.x + Math.sin(q.ang)*pd.off; pd.z = q.z - Math.cos(q.ang)*pd.off; pd.head = pd.dirn > 0 ? q.ang : q.ang + Math.PI; moving = true; }
-      else { const xw = pd.xw; if (pd.mode === 'wait') { pd.wait -= dt; pd.head = Math.atan2(-xw.Rn[1]*pd.side, -xw.Rn[0]*pd.side); if (pd.wait <= 0 && this.sigState(xw.node, xw.phase) === 'R' && this.sigState(xw.node, xw.phase, 7.5) === 'R') { pd.mode = 'cross'; pd.prog = 0; } }
+      else { const xw = pd.xw; if (pd.mode === 'wait') { pd.wait -= dt; pd.head = Math.atan2(-xw.Rn[1]*pd.side, -xw.Rn[0]*pd.side); if (pd.wait <= 0 && (xw.node === null ? this.zebraClear(xw) : this.sigState(xw.node, xw.phase) === 'R' && this.sigState(xw.node, xw.phase, 7.5) === 'R')) { pd.mode = 'cross'; pd.prog = 0; } }
         else { pd.prog += pd.speed*dt; const k = Math.min(pd.prog/10.6, 1); pd.x = xw.x + xw.Rn[0]*5.3*pd.side*(1 - 2*k); pd.z = xw.z + xw.Rn[1]*5.3*pd.side*(1 - 2*k); pd.head = Math.atan2(-xw.Rn[1]*pd.side, -xw.Rn[0]*pd.side); moving = true; if (k >= 1) { pd.mode = 'wait'; pd.side = -pd.side; pd.wait = rnd(6, 22); } } }
       pd.moving = moving; if (moving) pd.ph += pd.speed*dt*4.4;
       if (pl.vx !== undefined && pl.speed > 1.0) { const ex = pd.x - pl.x, ez = pd.z - pl.z; if (ex*ex + ez*ez < 16) { const c = Math.cos(pl.yaw), sn = Math.sin(pl.yaw), fw = ex*c + ez*sn, lt = -ex*sn + ez*c; if (Math.abs(fw) < pl.len*0.5 + 0.2 && Math.abs(lt) < (pl.wid || 1.9)*0.5 + 0.25 && Math.abs(pd.y - pl.y) < 2.2) this._pedHit(pd, pl); } }
