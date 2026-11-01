@@ -19,6 +19,7 @@ import { CityAmbience } from './ambience.js';
 import { stopSpeech, pauseSpeech } from './missions/voice.js';
 import { initFeedback, openFeedback, missionDone, mountMenuCard, sessionEnded } from './feedback.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { hasAR, openAR, closeAR, arOpen } from './ar.js';
 
 const $ = id => document.getElementById(id);
 const PLACES = [
@@ -152,7 +153,7 @@ function setupBigMap() {
     p[0] = e.clientX; p[1] = e.clientY; BM.dirty = true; });
   const up = e => { BM.ptr.delete(e.pointerId); BM.pinch = 0; cv.style.cursor = 'grab'; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   cv.addEventListener('wheel', e => { e.preventDefault(); zoomMap(e.deltaY < 0 ? 1.2 : 1/1.2, e.clientX, e.clientY); }, { passive: false });
-  addEventListener('keydown', e => { if (EX.on && e.code === 'Escape') { stopExplore(); return; } if (state.running && !e.repeat && e.code === 'KeyN' && radio.on) radio.next(); if (!state.running || e.repeat) return; if (e.code === 'KeyF' && !/^(INPUT|TEXTAREA)$/.test((e.target && e.target.tagName) || '')) { openFeedback({ trigger: 'touche F' }); return; } if (e.code === 'KeyM') { BM.open ? closeMap() : openMap(); } else if (e.code === 'Escape' || e.code === 'KeyP') { if (BM.open) closeMap(); else pause(!state.paused); } });
+  addEventListener('keydown', e => { if (EX.on && e.code === 'Escape') { if (arOpen()) closeAR(); else stopExplore(); return; } if (state.running && !e.repeat && e.code === 'KeyN' && radio.on) radio.next(); if (!state.running || e.repeat) return; if (e.code === 'KeyF' && !/^(INPUT|TEXTAREA)$/.test((e.target && e.target.tagName) || '')) { openFeedback({ trigger: 'touche F' }); return; } if (e.code === 'KeyM') { BM.open ? closeMap() : openMap(); } else if (e.code === 'Escape' || e.code === 'KeyP') { if (BM.open) closeMap(); else pause(!state.paused); } });
   addEventListener('resize', () => { if (BM.open) sizeBigMap(); });
 }
 function drawBigMap() {
@@ -388,12 +389,13 @@ function setupExplore() {
   $('exQuit').onclick = () => stopExplore(); $('exIn').onclick = () => exZoom(0.7); $('exOut').onclick = () => exZoom(1/0.7); $('exL').onclick = () => exOrbit(-0.45, 0); $('exR').onclick = () => exOrbit(0.45, 0);
   $('exUp').onclick = () => exOrbit(0, 0.2); $('exDown').onclick = () => exOrbit(0, -0.2);
   $('exTime').onclick = () => { EX.timeIdx = (EX.timeIdx + 1) % 3; atmo.setPreset(EX_TIMES[EX.timeIdx][0]); $('exTime').textContent = EX_TIMES[EX.timeIdx][1]; };
+  $('exAR').onclick = () => { if (EX.sel >= 0) openAR(LANDMARKS[EX.sel].name); }; $('arClose').onclick = closeAR; $('arSheet').addEventListener('pointerdown', e => { if (e.target === $('arSheet')) closeAR(); });
   $('exDrive').onclick = () => { if (EX.sel < 0) return; sel.place = EX.sel; document.querySelectorAll('#placeList button').forEach((b, i) => b.classList.toggle('on', i === sel.place)); stopExplore(true); $('go').click(); };
 }
 const _off = new THREE.Vector3(), _sph = new THREE.Spherical();
 function exZoom(f) { if (!EX.ctl) return; _off.copy(camera.position).sub(EX.ctl.target); const d = Math.max(EX.ctl.minDistance, Math.min(EX.ctl.maxDistance, _off.length()*f)); camera.position.copy(EX.ctl.target).addScaledVector(_off.normalize(), d); }
 function exOrbit(dTheta, dPhi) { if (!EX.ctl) return; _off.copy(camera.position).sub(EX.ctl.target); _sph.setFromVector3(_off); _sph.theta += dTheta; _sph.phi = Math.max(EX.ctl.minPolarAngle, Math.min(EX.ctl.maxPolarAngle, _sph.phi - dPhi)); camera.position.copy(EX.ctl.target).add(_off.setFromSpherical(_sph)); }
-function exSelect(i) { EX.sel = i; const l = LANDMARKS[i]; EX.labels.forEach((o, k) => o.el.classList.toggle('on', k === i)); $('exName').textContent = l.name; $('exCard').classList.remove('hidden'); EX.fly = { x: l.x, z: l.z, d: Math.min(camera.position.distanceTo(EX.ctl.target), 420) }; }
+function exSelect(i) { EX.sel = i; const l = LANDMARKS[i]; EX.labels.forEach((o, k) => o.el.classList.toggle('on', k === i)); $('exName').textContent = l.name; $('exCard').classList.remove('hidden'); $('exAR').classList.add('hidden'); hasAR(l.name).then(ok => { if (EX.sel === i) $('exAR').classList.toggle('hidden', !ok); }); EX.fly = { x: l.x, z: l.z, d: Math.min(camera.position.distanceTo(EX.ctl.target), 420) }; }
 function startExplore() {
   if (!state.ready || EX.on) return; EX.on = true; state.running = false;
   EX.saved = { r: prof.tileRadius, far: atmo.fog.far, hours: atmo.hours, auto: atmo.auto }; prof.tileRadius = prof === PROFILES.low ? 1000 : 1500; atmo.fog.far = 3800; atmo.explore = true; atmo.auto = false; const tm = sel.time === 'reel' ? modeOfHours(bamakoHours()) : sel.time; EX.timeIdx = tm === 'soir' ? 1 : tm === 'nuit' ? 2 : 0; atmo.setPreset(EX_TIMES[EX.timeIdx][0]); $('exTime').textContent = EX_TIMES[EX.timeIdx][1];
@@ -404,7 +406,7 @@ function startExplore() {
   const c = EX.ctl = new OrbitControls(camera, $('exPad')); c.target.set(EX.tx, g0, EX.tz); c.enableDamping = true; c.dampingFactor = 0.09; c.rotateSpeed = 0.75; c.zoomSpeed = 1.1; c.panSpeed = 0.9; c.minDistance = 70; c.maxDistance = 3600; c.minPolarAngle = 0.12; c.maxPolarAngle = 1.46; c.screenSpacePanning = false; c.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }; c.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }; c.update();
 }
 function stopExplore(toGame) {
-  if (!EX.on) return; EX.on = false; if (traffic) traffic.endExplore(toGame ? null : player); if (EX.ctl) { EX.ctl.dispose(); EX.ctl = null; } $('explore').classList.add('hidden'); prof.tileRadius = EX.saved.r; atmo.fog.far = EX.saved.far; atmo.explore = false; atmo.auto = EX.saved.auto; if (!toGame) atmo.hours = EX.saved.hours; camera.far = 6000; camera.fov = 64; camera.updateProjectionMatrix(); world.update(EX.tx, EX.tz, true);
+  if (!EX.on) return; EX.on = false; closeAR(); if (traffic) traffic.endExplore(toGame ? null : player); if (EX.ctl) { EX.ctl.dispose(); EX.ctl = null; } $('explore').classList.add('hidden'); prof.tileRadius = EX.saved.r; atmo.fog.far = EX.saved.far; atmo.explore = false; atmo.auto = EX.saved.auto; if (!toGame) atmo.hours = EX.saved.hours; camera.far = 6000; camera.fov = 64; camera.updateProjectionMatrix(); world.update(EX.tx, EX.tz, true);
   if (!toGame) { $('menu').classList.remove('hidden'); if (player) $('backGame').classList.remove('hidden'); }
 }
 const _v = new THREE.Vector3(), _bf = new THREE.Vector3();

@@ -12,6 +12,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@google/model-viewer": "^4.0.0",
     "fflate": "^0.8.2",
     "three": "^0.170.0"
   }

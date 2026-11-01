@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Open+Sans:wght@400;600&family=Rubik:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/game.css">
-<script type="importmap">{ "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/", "fflate": "./node_modules/fflate/esm/browser.js" } }</script>
+<script type="importmap">{ "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/", "fflate": "./node_modules/fflate/esm/browser.js", "model-viewer": "./node_modules/@google/model-viewer/dist/model-viewer.min.js" } }</script>
 </head>
 <body>
 <canvas id="gl"></canvas>
@@ -81,7 +81,17 @@
   <div id="exPad"></div><div id="exLabels"></div>
   <div id="exTop"><div id="exTitle">Bamako vue du ciel</div><button id="exTime" aria-label="Moment de la journée">☀ Jour</button><button id="exQuit" aria-label="Quitter l'exploration">✕ Quitter</button></div>
   <div id="exTools"><button id="exIn" aria-label="Zoom +">+</button><button id="exOut" aria-label="Zoom -">−</button><button id="exL" aria-label="Tourner à gauche">⟲</button><button id="exR" aria-label="Tourner à droite">⟳</button><button id="exUp" aria-label="Plus incliné">⤒</button><button id="exDown" aria-label="Vue du dessus">⤓</button></div>
-  <div id="exCard" class="hidden"><b id="exName"></b><button id="exDrive">🚗 Conduire ici</button></div>
+  <div id="exCard" class="hidden"><b id="exName"></b><button id="exDrive">🚗 Conduire ici</button><button id="exAR" class="hidden">📱 Voir en AR</button></div>
+  <div id="arSheet" class="hidden" role="dialog" aria-modal="true" aria-labelledby="arName">
+    <div id="arBox">
+      <button id="arClose" aria-label="Fermer">✕</button>
+      <div id="arKicker">Réalité augmentée</div><h2 id="arName"></h2>
+      <div id="arStage"></div>
+      <p id="arMsg"></p>
+      <button id="arGo" class="cta" disabled>📱 Voir en AR dans ma pièce</button>
+      <p id="arHint">Pointe ton téléphone vers une table ou le sol, puis touche l'écran pour poser le lieu. Pince pour l'agrandir, tourne-le avec deux doigts.</p>
+    </div>
+  </div>
   <div id="exHint">1 doigt : tourner autour de la ville · 2 doigts : zoomer (pincer) et déplacer · molette : zoom · touche une pancarte pour y aller</div>
 </div>
 <div id="rotate" class="hidden">↻ Tourne ton téléphone en mode paysage</div>
