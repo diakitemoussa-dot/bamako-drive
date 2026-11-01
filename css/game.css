@@ -219,3 +219,14 @@ body.touch #mBtns kbd { display:none; }
 body.ctl-buttons #steerBtns { display:flex; } body.ctl-buttons #steerZone { display:none; }
 .pedal.steer { width:min(21vh, 118px); height:min(27vh, 150px); font-size:min(7vh, 40px); }
 #sideBtns #btnCtl { border-color:var(--gold); }
+
+/* --- Téléphone : écran dégagé (boutons secondaires derrière « ⋯ ») --- */
+body.touchhud #sideBtns { display:none !important; }
+#hudMore { font-size:20px !important; font-weight:800; line-height:1; padding:4px 14px !important; } #hudMore.on { background:var(--gold) !important; color:var(--plum) !important; border-color:var(--gold) !important; }
+#quickBtns { position:absolute; right:calc(12px + var(--safe-r)); bottom:calc(min(30vh, 160px) + 22px + var(--safe-b)); display:flex; flex-direction:column; gap:10px; pointer-events:none; }
+#quickBtns button { pointer-events:auto; width:54px; height:54px; padding:0; border-radius:50%; border:2px solid var(--lilac); background:rgba(85,65,93,.62); color:var(--cream); font-size:24px; line-height:1; touch-action:none; display:grid; place-items:center; } #quickBtns button.on { filter:brightness(1.5); transform:scale(.95); }
+#moreTray { position:fixed; right:calc(12px + var(--safe-r)); top:calc(54px + var(--safe-t)); z-index:30; display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; width:min(340px, 92vw); padding:10px; background:rgba(59,44,66,.96); border:2px solid var(--gold); border-radius:18px; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+#moreTray.hidden { display:none; }
+#moreTray button { min-height:44px; padding:6px 8px; border-radius:14px; border:1px solid var(--lilac); background:rgba(248,243,234,.1); color:var(--cream); font:600 13px Rubik, Lato, sans-serif; white-space:nowrap; touch-action:manipulation; cursor:pointer; }
+#moreTray button.on { background:var(--gold); color:var(--plum); border-color:var(--gold); }
+#moreTray .sigBtn.on { background:#2d8a3a; border-color:#4ee05c; color:#fff; }
