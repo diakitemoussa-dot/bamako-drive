@@ -79,6 +79,25 @@ function wallsFromTiles(tris, cls) {
   return out;
 }
 
+/** PNG 128x128 d'un motif de fenêtre (mur blanc, vitre bleu-gris) — encodeur minimal, sans dépendance */
+function windowPng() {
+  const W = 128, H = 128, raw = Buffer.alloc((W * 4 + 1) * H);
+  for (let y = 0; y < H; y++) {
+    raw[y * (W * 4 + 1)] = 0;
+    for (let x = 0; x < W; x++) {
+      let c = [255, 255, 255];
+      if (x >= 32 && x < 96 && y >= 24 && y < 92) c = y < 58 ? [86, 112, 142] : [52, 72, 98];            // vitre (reflet du ciel en haut)
+      else if (x >= 30 && x < 98 && y >= 22 && y < 94) c = [170, 170, 170];                               // cadre
+      else if (x >= 28 && x < 100 && y >= 94 && y < 98) c = [205, 205, 205];                              // appui de fenêtre
+      if ((x === 63 || x === 64) && y >= 24 && y < 92) c = [175, 175, 175];                               // montant central
+      const o = y * (W * 4 + 1) + 1 + x * 4; raw[o] = c[0]; raw[o + 1] = c[1]; raw[o + 2] = c[2]; raw[o + 3] = 255;
+    }
+  }
+  const chunk = (type, data) => { const b = Buffer.alloc(12 + data.length); b.writeUInt32BE(data.length, 0); b.write(type, 4, 'ascii'); data.copy(b, 8); b.writeUInt32BE(zlib.crc32(b.subarray(4, 8 + data.length)) >>> 0, 8 + data.length); return b; };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4); ihdr[8] = 8; ihdr[9] = 6;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
+}
+
 function extract(nodes, label) {
   const out = { asset: { version: '2.0', generator: 'bamako-drive build_ar_models' }, scene: 0, scenes: [{ nodes: [0] }], nodes: [], meshes: [], materials: [], textures: [], images: [], samplers: [], accessors: [], bufferViews: [] };
   const chunks = []; let off = 0;
@@ -132,20 +151,35 @@ function extract(nodes, label) {
   if (WALLS_FROM_TILES[label]) {
     const walls = wallsFromTiles(nodes.flatMap(nodeTriangles), WALLS_FROM_TILES[label].cls); nWalls = walls.length;
     if (walls.length) {
-      const n = walls.length * 3, pos = Buffer.alloc(n * 12), nor = Buffer.alloc(n * 12), col = Buffer.alloc(n * 4); let k = 0;
-      const mnP = [1e9, 1e9, 1e9], mxP = [-1e9, -1e9, -1e9];
-      for (const w of walls) {
-        const [A, B, C] = w.P, u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], v = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
-        let N = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]; const L = Math.hypot(...N) || 1; N = N.map(x => x / L);
-        for (let i = 0; i < 3; i++, k++) {
-          for (let a = 0; a < 3; a++) { pos.writeFloatLE(w.P[i][a], k * 12 + a * 4); nor.writeFloatLE(N[a], k * 12 + a * 4); mn[a] = Math.min(mn[a], w.P[i][a]); mx[a] = Math.max(mx[a], w.P[i][a]); mnP[a] = Math.min(mnP[a], w.P[i][a]); mxP[a] = Math.max(mxP[a], w.P[i][a]); }
-          for (let a = 0; a < 3; a++) col[k * 4 + a] = Math.round(srgb2lin(w.C[i][a]) * 255); col[k * 4 + 3] = 255;
+      const addView = data => { const pad = (4 - off % 4) % 4; if (pad) { chunks.push(Buffer.alloc(pad)); off += pad; } out.bufferViews.push({ buffer: 0, byteOffset: off, byteLength: data.length, ...(data.target ? {} : {}) }); chunks.push(data); off += data.length; return out.bufferViews.length - 1; };
+      const addAcc = (view, type, ct, count, more) => { out.accessors.push({ bufferView: view, componentType: ct, count, type, ...more }); return out.accessors.length - 1; };
+      const normal = w => { const [A, B, C] = w.P, u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], v = [C[0] - A[0], C[1] - A[1], C[2] - A[2]], N = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], L = Math.hypot(...N) || 1; return N.map(x => x / L); };
+      // texture de fenêtres (un motif = WIN_W x WIN_H mètres, répété) : le mur reste blanc, la couleur vient des sommets
+      const WIN_W = 4.2, WIN_H = 3.4;
+      const png = windowPng();
+      out.images.push({ bufferView: addView(png), mimeType: 'image/png' }); out.samplers = out.samplers || []; out.samplers.push({ magFilter: 9729, minFilter: 9987, wrapS: 10497, wrapT: 10497 });
+      out.textures.push({ source: out.images.length - 1, sampler: out.samplers.length - 1 });
+      const matWall = out.materials.push({ name: 'Murs', pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], baseColorTexture: { index: out.textures.length - 1 }, metallicFactor: 0, roughnessFactor: 0.9 }, doubleSided: true }) - 1;
+      const matRoof = out.materials.push({ name: 'Toits', pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.92 }, doubleSided: true }) - 1;
+      const mk = (list, textured) => {
+        if (!list.length) return;
+        const n = list.length * 3, pos = Buffer.alloc(n * 12), nor = Buffer.alloc(n * 12), col = Buffer.alloc(n * 4), uv = textured ? Buffer.alloc(n * 8) : null; let k = 0;
+        const mnP = [1e9, 1e9, 1e9], mxP = [-1e9, -1e9, -1e9];
+        for (const w of list) {
+          const N = normal(w), th = Math.hypot(N[0], N[2]) || 1, T = [N[2] / th, 0, -N[0] / th];   // T : horizontale le long du mur
+          for (let i = 0; i < 3; i++, k++) {
+            const P = w.P[i];
+            for (let a = 0; a < 3; a++) { pos.writeFloatLE(P[a], k * 12 + a * 4); nor.writeFloatLE(N[a], k * 12 + a * 4); mn[a] = Math.min(mn[a], P[a]); mx[a] = Math.max(mx[a], P[a]); mnP[a] = Math.min(mnP[a], P[a]); mxP[a] = Math.max(mxP[a], P[a]); }
+            for (let a = 0; a < 3; a++) col[k * 4 + a] = Math.round(srgb2lin(w.C[i][a]) * 255); col[k * 4 + 3] = 255;
+            if (uv) { uv.writeFloatLE((P[0] * T[0] + P[2] * T[2]) / WIN_W, k * 8); uv.writeFloatLE(-P[1] / WIN_H, k * 8 + 4); }
+          }
         }
-      }
-      const addView = data => { const pad = (4 - off % 4) % 4; if (pad) { chunks.push(Buffer.alloc(pad)); off += pad; } out.bufferViews.push({ buffer: 0, byteOffset: off, byteLength: data.length, target: 34962 }); chunks.push(data); off += data.length; return out.bufferViews.length - 1; };
-      const addAcc = (view, type, ct, more) => { out.accessors.push({ bufferView: view, componentType: ct, count: n, type, ...more }); return out.accessors.length - 1; };
-      out.materials.push({ name: 'Murs', pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.92 }, doubleSided: true });
-      out.meshes[0].primitives.push({ attributes: { POSITION: addAcc(addView(pos), 'VEC3', 5126, { min: mnP, max: mxP }), NORMAL: addAcc(addView(nor), 'VEC3', 5126), COLOR_0: addAcc(addView(col), 'VEC4', 5121, { normalized: true }) }, material: out.materials.length - 1, mode: 4 });
+        const attributes = { POSITION: addAcc(addView(pos), 'VEC3', 5126, n, { min: mnP, max: mxP }), NORMAL: addAcc(addView(nor), 'VEC3', 5126, n), COLOR_0: addAcc(addView(col), 'VEC4', 5121, n, { normalized: true }) };
+        if (uv) attributes.TEXCOORD_0 = addAcc(addView(uv), 'VEC2', 5126, n);
+        out.meshes[0].primitives.push({ attributes, material: textured ? matWall : matRoof, mode: 4 });
+      };
+      mk(walls.filter(w => Math.abs(normal(w)[1]) < 0.5), true);    // murs : avec fenêtres
+      mk(walls.filter(w => Math.abs(normal(w)[1]) >= 0.5), false);  // toits / dalles : unis
     }
   }
   const ext = [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]], s = AR_SIZE / Math.max(...ext), c = [(mn[0] + mx[0]) / 2, mn[1], (mn[2] + mx[2]) / 2];
