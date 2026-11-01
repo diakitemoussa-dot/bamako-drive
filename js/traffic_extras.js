@@ -14,6 +14,8 @@ function signTexture(kind, val) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
 }
 
+import { gunzipSync } from 'fflate';
+const sgn = (v) => v < 0 ? -1 : 1;
 export function install(T) {
   const P = T.prototype;
   P._buildFurniture = function () {
@@ -66,21 +68,55 @@ export function install(T) {
     this.pm = { body: mk(body, mat, true), head: mk(head, mat, true), legL: mk(leg, mat, true), legR: mk(leg, mat, true), cap }; this.peds = [];
   };
   P._initPeds = function (c) {
+    this._loadRoadMask();
     this.peds = []; const n = this.prof.peds, crossN = Math.round(n*0.28);
     this.xwalks = []; for (const s of this.g.signals) for (const a of s.approaches) { const T = a.T, Rn = [-T[1], T[0]]; this.xwalks.push({ node: s.node, phase: a.phase, x: a.C[0] - T[0]*2.4, z: a.C[1] - T[1]*2.4, Rn, T }); }
     if (this.zebras) this.xwalks.push(...this.zebras);   // passages piétons sans feu
     for (let i = 0; i < n; i++) { const pd = { mode: 'off', x: 0, z: 0, y: 0, head: 0, speed: rnd(1.0, 1.6), ph: rnd(0, 6.28), col: PED_COLS[(Math.random()*PED_COLS.length) | 0], skin: SKIN[(Math.random()*SKIN.length) | 0], h: rnd(0.93, 1.08), edge: null, s: 0, lo: 0, hi: 1, dirn: 1, off: 2.9, wait: 0, prog: 0, side: 1, xw: null, vis: false };
       this.peds.push(pd); if (i < crossN) this._pedCross(pd, c.x, c.z, 520); else this._pedWalk(pd, c.x, c.z, 20, 480); }
   };
+  // ---------- trottoirs : les piétons marchent À CÔTÉ du goudron, jamais dessus (masque généré depuis le modèle : data/roadmask.bin.gz) ----------
+  P._loadRoadMask = function () {
+    if (this._maskP) return; this._maskP = fetch('data/roadmask.bin.gz').then(r => r.ok ? r.arrayBuffer() : Promise.reject(r.status)).then(b => {
+      const raw = gunzipSync(new Uint8Array(b)), dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+      this.rmask = { x0: dv.getInt32(0, true), z0: dv.getInt32(4, true), w: dv.getInt32(8, true), h: dv.getInt32(12, true), bits: raw.subarray(16) };
+    }).catch(() => { this.rmask = null; });
+  };
+  P.onAsphalt = function (x, z) {
+    const m = this.rmask; if (!m) return false; const ix = Math.floor(x - m.x0), iz = Math.floor(z - m.z0); if (ix < 0 || iz < 0 || ix >= m.w || iz >= m.h) return false;
+    const k = iz*m.w + ix; return (m.bits[k >> 3] >> (7 - (k & 7))) & 1;
+  };
+  /** distance (m) à parcourir depuis (x,z) dans la direction (dx,dz) pour sortir du goudron ; -1 si le point de départ n'est pas sur le goudron, 99 si introuvable */
+  P._asphaltExit = function (x, z, dx, dz) {
+    if (!this.onAsphalt(x, z)) return -1;
+    for (let d = 0.5; d <= 18; d += 0.5) if (!this.onAsphalt(x + dx*d, z + dz*d) && !this.onAsphalt(x + dx*(d + 1), z + dz*(d + 1))) return d;
+    return 99;
+  };
+  /** décalage latéral (signé) qui place le piéton sur l'accotement, à ~1,4 m du bord du goudron ; null s'il n'y a pas de goudron ici */
+  P._curbOff = function (q, side) {
+    const nx = Math.sin(q.ang)*side, nz = -Math.cos(q.ang)*side, e = this._asphaltExit(q.x, q.z, nx, nz); if (e < 0 || e >= 99) return null;
+    for (const m of [1.5, 1.1, 0.8]) { const d = e + m; if (!this.world.solid(q.x + nx*d, q.z + nz*d)) return side*d; }
+    return side*(e + 0.5);
+  };
+  P._pedSide = function (Pc, s) {   // côté le plus proche du bord de la route
+    const q = Pc.at(s), nx = Math.sin(q.ang), nz = -Math.cos(q.ang), a = this._asphaltExit(q.x, q.z, nx, nz), b = this._asphaltExit(q.x, q.z, -nx, -nz);
+    if (a < 0 && b < 0) return 0; if (a < 0) return -1; if (b < 0) return 1; return a <= b ? 1 : -1;
+  };
   P._pedWalk = function (pd, cx, cz, rmin, rmax) {
     const g = this.g, cell = 24, r = Math.ceil(rmax/cell), ci = Math.floor(cx/cell), cj = Math.floor(cz/cell), ids = new Set();
     for (let i = ci - r; i <= ci + r; i++) for (let j = cj - r; j <= cj + r; j++) { const a = g.grid.get(i*100000 + j); if (a) for (const id of a) ids.add(id); }
     const c = [...ids].filter(id => { const e = g.edges[id]; if (e.len < 40 || e.level === 1 || e.bridge) return false; const d = Math.hypot(g.px(e, e.n >> 1) - cx, g.pz(e, e.n >> 1) - cz); return d >= rmin && d <= rmax; }); if (!c.length) { pd.mode = 'off'; return; }
-    const id = c[(Math.random()*c.length) | 0], Pc = this.edgePiece(id), span = rnd(18, 55), lo = rnd(Pc.a + 2, Math.max(Pc.a + 3, Pc.b - span)); Object.assign(pd, { mode: 'walk', edge: Pc, lo, hi: Math.min(Pc.b - 2, lo + span), s: rnd(lo, Math.min(Pc.b - 2, lo + span)), dirn: Math.random() < 0.5 ? 1 : -1, off: 2.9 + rnd(-0.3, 0.9) });
+    const id = c[(Math.random()*c.length) | 0], Pc = this.edgePiece(id), span = rnd(18, 55), lo = rnd(Pc.a + 2, Math.max(Pc.a + 3, Pc.b - span)); Object.assign(pd, { mode: 'walk', edge: Pc, lo, hi: Math.min(Pc.b - 2, lo + span), s: rnd(lo, Math.min(Pc.b - 2, lo + span)), dirn: Math.random() < 0.5 ? 1 : -1, off: 2.9 + rnd(-0.3, 0.9) }); pd.cside = undefined; if (this.rmask) { pd.cside = this._pedSide(Pc, pd.s); if (pd.cside) { const o = this._curbOff(Pc.at(pd.s), pd.cside); if (o !== null) pd.off = o; } }
+  };
+  /** distances (de chaque côté du centre du passage) jusqu'au bord de la chaussée + 1,4 m ; 5,3 m par défaut si le masque ne couvre pas l'endroit */
+  P._xwExt = function (xw) {
+    if (xw.ext) return xw.ext; if (!this.rmask) return { '1': 5.3, '-1': 5.3 };   // masque pas encore chargé : valeurs par défaut, sans mémoriser
+    let bad = false; const f = (sd) => { const e = this._asphaltExit(xw.x, xw.z, xw.Rn[0]*sd, xw.Rn[1]*sd); if (e >= 99) bad = true; return e < 0 || e >= 99 ? 5.3 : Math.max(2.5, e + 1.4); };
+    const r = { '1': f(1), '-1': f(-1), bad }; return (xw.ext = r);   // bad : carrefour géant, pas de bord trouvé → les piétons n'y traversent pas
   };
   P._pedCross = function (pd, cx, cz, R) {
-    const xs = this.xwalks.filter(x => (x.x - cx)**2 + (x.z - cz)**2 < R*R); if (!xs.length) { this._pedWalk(pd, cx, cz, 20, 480); return; } const xw = xs[(Math.random()*xs.length) | 0];
-    Object.assign(pd, { mode: 'wait', xw, side: Math.random() < 0.5 ? 1 : -1, wait: rnd(0, 12) }); pd.x = xw.x + xw.Rn[0]*5.3*pd.side; pd.z = xw.z + xw.Rn[1]*5.3*pd.side;
+    const xs = this.xwalks.filter(x => (x.x - cx)**2 + (x.z - cz)**2 < R*R && !(x.ext && x.ext.bad)); if (!xs.length) { this._pedWalk(pd, cx, cz, 20, 480); return; } const xw = xs[(Math.random()*xs.length) | 0];
+    Object.assign(pd, { mode: 'wait', xw, side: Math.random() < 0.5 ? 1 : -1, wait: rnd(0, 12) }); { const ex = this._xwExt(xw), l0 = ex[pd.side]; pd.x = xw.x + xw.Rn[0]*l0*pd.side; pd.z = xw.z + xw.Rn[1]*l0*pd.side; }
   };
   P._pedHit = function (pd, pl) {   // le piéton est renversé : projeté dans le sens de la voiture, tombe, puis réapparaît plus loin après quelques secondes
     const sp = pl.speed; Object.assign(pd, { mode: 'hit', hitT: 0, fall: 0, fy: 0, moving: false, vy: 2.4 + Math.min(sp, 25)*0.17, vx: pl.vx*0.9 + (Math.random() - 0.5)*1.4, vz: pl.vz*0.9 + (Math.random() - 0.5)*1.4, head: Math.atan2(pl.vz, pl.vx) + Math.PI });
@@ -91,9 +127,10 @@ export function install(T) {
     for (const pd of this.peds) { if (pd.mode === 'off') continue; let moving = false;
       if (pd.mode === 'hit') { pd.hitT += dt; pd.x += pd.vx*dt; pd.z += pd.vz*dt; const fr = Math.exp(-dt*(pd.fy > 0.02 ? 0.5 : 3.5)); pd.vx *= fr; pd.vz *= fr; pd.fy += pd.vy*dt; pd.vy -= 11*dt; if (pd.fy <= 0) { pd.fy = 0; pd.vy = pd.vy < -3 ? -pd.vy*0.2 : 0; } pd.fall = Math.min(1.5, pd.fall + dt*3.4); pd.moving = false;
         if (pd.hitT > 4.5) { pd.mode = 'off'; pd.fy = 0; pd.fall = 0; this._pedWalk(pd, pl.x, pl.z, this.renderR*0.5, this.renderR + 80); } continue; }
-      if (pd.mode === 'walk') { const E = pd.edge; let s = pd.s + pd.dirn*pd.speed*dt; if (s > pd.hi) { s = pd.hi; pd.dirn = -1; } else if (s < pd.lo) { s = pd.lo; pd.dirn = 1; } pd.s = s; const q = E.at(s); pd.x = q.x + Math.sin(q.ang)*pd.off; pd.z = q.z - Math.cos(q.ang)*pd.off; pd.head = pd.dirn > 0 ? q.ang : q.ang + Math.PI; moving = true; }
-      else { const xw = pd.xw; if (pd.mode === 'wait') { pd.wait -= dt; pd.head = Math.atan2(-xw.Rn[1]*pd.side, -xw.Rn[0]*pd.side); if (pd.wait <= 0 && (xw.node === null ? this.zebraClear(xw) : this.sigState(xw.node, xw.phase) === 'R' && this.sigState(xw.node, xw.phase, 7.5) === 'R')) { pd.mode = 'cross'; pd.prog = 0; } }
-        else { pd.prog += pd.speed*dt; const k = Math.min(pd.prog/10.6, 1); pd.x = xw.x + xw.Rn[0]*5.3*pd.side*(1 - 2*k); pd.z = xw.z + xw.Rn[1]*5.3*pd.side*(1 - 2*k); pd.head = Math.atan2(-xw.Rn[1]*pd.side, -xw.Rn[0]*pd.side); moving = true; if (k >= 1) { pd.mode = 'wait'; pd.side = -pd.side; pd.wait = rnd(6, 22); } } }
+      if (pd.mode === 'walk') { const E = pd.edge; let s = pd.s + pd.dirn*pd.speed*dt; if (s > pd.hi) { s = pd.hi; pd.dirn = -1; } else if (s < pd.lo) { s = pd.lo; pd.dirn = 1; } pd.s = s; const q = E.at(s); if (this.rmask) { if (pd.cside === undefined) pd.cside = this._pedSide(E, s); if (pd.cside) { const o = this._curbOff(q, pd.cside); if (o !== null) pd.off += (o - pd.off)*Math.min(1, dt*3); } } pd.x = q.x + Math.sin(q.ang)*pd.off; pd.z = q.z - Math.cos(q.ang)*pd.off; pd.head = pd.dirn > 0 ? q.ang : q.ang + Math.PI; moving = true; }
+      else { const xw = pd.xw; if (pd.mode === 'wait') { pd.wait -= dt; pd.head = Math.atan2(-xw.Rn[1]*pd.side, -xw.Rn[0]*pd.side); if (this.rmask && this._xwExt(xw).bad) { this._pedWalk(pd, pl.x, pl.z, this.renderR*0.5, this.renderR + 80); continue; }
+        if (this.rmask) { const l0 = pd.side*this._xwExt(xw)[pd.side], tx = xw.x + xw.Rn[0]*l0, tz = xw.z + xw.Rn[1]*l0, k = Math.min(1, dt*2.5); pd.x += (tx - pd.x)*k; pd.z += (tz - pd.z)*k; }   /* attend sur l'accotement, pas sur la chaussée */ if (pd.wait <= 0 && (xw.node === null ? this.zebraClear(xw) : this.sigState(xw.node, xw.phase) === 'R' && this.sigState(xw.node, xw.phase, 7.5) === 'R')) { pd.mode = 'cross'; pd.prog = 0; } }
+        else { const ex = this._xwExt(xw), l0 = pd.side*ex[pd.side], l1 = -pd.side*ex[-pd.side], len = Math.abs(l1 - l0); pd.prog += pd.speed*dt; const k = Math.min(pd.prog/len, 1), lat = l0 + (l1 - l0)*k; pd.x = xw.x + xw.Rn[0]*lat; pd.z = xw.z + xw.Rn[1]*lat; pd.head = Math.atan2(-xw.Rn[1]*pd.side, -xw.Rn[0]*pd.side); moving = true; if (k >= 1) { pd.mode = 'wait'; pd.side = -pd.side; pd.wait = rnd(6, 22); } } }
       pd.moving = moving; if (moving) pd.ph += pd.speed*dt*4.4;
       if (pl.vx !== undefined && pl.speed > 1.0) { const ex = pd.x - pl.x, ez = pd.z - pl.z; if (ex*ex + ez*ez < 16) { const c = Math.cos(pl.yaw), sn = Math.sin(pl.yaw), fw = ex*c + ez*sn, lt = -ex*sn + ez*c; if (Math.abs(fw) < pl.len*0.5 + 0.2 && Math.abs(lt) < (pl.wid || 1.9)*0.5 + 0.25 && Math.abs(pd.y - pl.y) < 2.2) this._pedHit(pd, pl); } }
       const dx = pd.x - pl.x, dz = pd.z - pl.z; if (dx*dx + dz*dz > R2*1.6 && pd.mode === 'walk') { if (Math.random() < 0.02) this._pedWalk(pd, pl.x, pl.z, this.renderR*0.5, this.renderR + 80); } }

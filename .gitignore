@@ -5,3 +5,7 @@ dist/
 data/landmarks/
 data/qa_report.json
 data/*_avant_bord.json
+data/beacons_avant_hauteur.json
+data/tiles_avant_eau/
+data/graph_avant_sens.json
+data/graph_pts_avant_sens.bin.gz

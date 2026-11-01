@@ -14,6 +14,10 @@ import { Bats } from './bats.js';
 import { Missions } from './missions/engine.js';
 import { Signal } from './signal.js';
 import { addLandmarks } from './landmarks.js';
+import { Police } from './police.js';
+import { CityAmbience } from './ambience.js';
+import { stopSpeech, pauseSpeech } from './missions/voice.js';
+import { initFeedback, openFeedback, missionDone, mountMenuCard, sessionEnded } from './feedback.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const $ = id => document.getElementById(id);
@@ -27,7 +31,7 @@ const state = { running: false, paused: false, cam: 0, lights: null, hornT: 0, s
 
 // ---------------- renderer / scene ----------------
 let prof = PROFILES[detect()]; const urlQ = new URLSearchParams(location.search).get('q'); if (urlQ && PROFILES[urlQ]) prof = PROFILES[urlQ];
-let renderer, scene, camera, world, atmo, models, graph, player, input, sound, dyn, traffic = null, bats = null, missions = null, signal = null;
+let renderer, scene, camera, world, atmo, models, graph, player, input, sound, dyn, traffic = null, bats = null, missions = null, signal = null, police = null, ambience = null;
 function createRenderer() {
   if (renderer) renderer.dispose();
   renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: prof.antialias, powerPreference: 'high-performance', alpha: false });
@@ -46,12 +50,12 @@ function penalty(n, why) { state.score = Math.max(0, state.score - n); $('scoreV
 
 // ---------------- night lights: street lamps (pools + glow), player headlights ----------------
 let lampPool = null, lampGlow = null, headSpots = [], cones = null;
-function glowTexture() { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'), r = g.createRadialGradient(64, 64, 2, 64, 64, 62); r.addColorStop(0, 'rgba(255,235,190,1)'); r.addColorStop(0.25, 'rgba(255,210,140,.55)'); r.addColorStop(1, 'rgba(255,190,100,0)'); g.fillStyle = r; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); }
+function glowTexture() { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'), r = g.createRadialGradient(64, 64, 2, 64, 64, 62); r.addColorStop(0, 'rgba(255,190,100,1)'); r.addColorStop(0.25, 'rgba(255,140,50,.6)'); r.addColorStop(1, 'rgba(255,100,20,0)'); /* lampadaires orange (sodium) */ g.fillStyle = r; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); }
 function setupLights() {
   const tex = glowTexture(); const pg = new THREE.PlaneGeometry(1, 1); pg.rotateX(-Math.PI/2);
-  lampPool = new THREE.InstancedMesh(pg, new THREE.MeshBasicMaterial({ map: tex, color: 0xffd9a0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0 }), 2500); lampPool.frustumCulled = false; lampPool.count = 0; scene.add(lampPool);
+  lampPool = new THREE.InstancedMesh(pg, new THREE.MeshBasicMaterial({ map: tex, color: 0xff9c45, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0 }), 2500); lampPool.frustumCulled = false; lampPool.count = 0; scene.add(lampPool);
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(2500*3), 3));
-  lampGlow = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size: 8.5, sizeAttenuation: true, color: 0xffe2b0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0 })); lampGlow.frustumCulled = false; scene.add(lampGlow);
+  lampGlow = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size: 8.5, sizeAttenuation: true, color: 0xffa650, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0 })); lampGlow.frustumCulled = false; scene.add(lampGlow);
   world.onTilesChanged = refreshLamps;
   for (let i = 0; i < 2; i++) { const s = new THREE.SpotLight(0xfff0d0, 0, 95, 0.52, 0.55, 1.2); s.castShadow = false; scene.add(s); scene.add(s.target); headSpots.push(s); }
 }
@@ -148,7 +152,7 @@ function setupBigMap() {
     p[0] = e.clientX; p[1] = e.clientY; BM.dirty = true; });
   const up = e => { BM.ptr.delete(e.pointerId); BM.pinch = 0; cv.style.cursor = 'grab'; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   cv.addEventListener('wheel', e => { e.preventDefault(); zoomMap(e.deltaY < 0 ? 1.2 : 1/1.2, e.clientX, e.clientY); }, { passive: false });
-  addEventListener('keydown', e => { if (EX.on && e.code === 'Escape') { stopExplore(); return; } if (state.running && !e.repeat && e.code === 'KeyN' && radio.on) radio.next(); if (!state.running || e.repeat) return; if (e.code === 'KeyM') { BM.open ? closeMap() : openMap(); } else if (e.code === 'Escape' || e.code === 'KeyP') { if (BM.open) closeMap(); else pause(!state.paused); } });
+  addEventListener('keydown', e => { if (EX.on && e.code === 'Escape') { stopExplore(); return; } if (state.running && !e.repeat && e.code === 'KeyN' && radio.on) radio.next(); if (!state.running || e.repeat) return; if (e.code === 'KeyF' && !/^(INPUT|TEXTAREA)$/.test((e.target && e.target.tagName) || '')) { openFeedback({ trigger: 'touche F' }); return; } if (e.code === 'KeyM') { BM.open ? closeMap() : openMap(); } else if (e.code === 'Escape' || e.code === 'KeyP') { if (BM.open) closeMap(); else pause(!state.paused); } });
   addEventListener('resize', () => { if (BM.open) sizeBigMap(); });
 }
 function drawBigMap() {
@@ -186,14 +190,14 @@ async function begin() {
   const sp = startPos(); world.update(sp.x, sp.z, true);
   await new Promise(res => { const t0 = performance.now(); const chk = () => { const loaded = world.tiles.size, want = Math.min(4, world.index.size); if ((world.tileAt(sp.x, sp.z) && world.loading.size === 0) || performance.now() - t0 > 12000) res(); else setTimeout(chk, 80); }; chk(); });
   if (player) { scene.remove(player.car.root); }
-  const cols = models.kinds[sel.car].colors, color = cols[sel.ci % cols.length]; const g = world.ground(sp.x, sp.z, null) ?? 20; player = new Player(models, world, sel.car, color, { x: sp.x, y: g, z: sp.z }, sp.yaw); scene.add(player.car.root); player.onCrash = (v) => { shake = Math.min(0.6, v*0.04); sound.crash(v); penalty(Math.min(8, Math.round(v*0.6)), 'Collision'); if (missions) missions.onCrash(v); };
+  const cols = models.kinds[sel.car].colors, color = cols[sel.ci % cols.length]; const g = world.ground(sp.x, sp.z, null) ?? 20; player = new Player(models, world, sel.car, color, { x: sp.x, y: g, z: sp.z }, sp.yaw); scene.add(player.car.root); player.onCrash = (v) => { shake = Math.min(0.6, v*0.04); sound.crash(v); penalty(Math.min(8, Math.round(v*0.6)), 'Collision'); if (missions) missions.onCrash(v); if (police) police.noteCrash(); };
   player.car.setPose(sp.x, g, sp.z, sp.yaw, 0, 0); camPos.set(sp.x - Math.cos(sp.yaw)*8, g + 4, sp.z - Math.sin(sp.yaw)*8); camLook.set(sp.x, g + 1, sp.z); camYaw = sp.yaw;
   if (sel.time === 'auto') { atmo.hours = 9.5; atmo.auto = true; } else if (sel.time === 'reel') { atmo.hours = bamakoHours(); atmo.auto = false; } else { atmo.setPreset(sel.time); }
   atmo.update(0, new THREE.Vector3(sp.x, g, sp.z)); state.lights = null; state.score = 100; $('scoreVal').textContent = 100;
   if (traffic) traffic.start(sp, sel.traffic, player);
-  if (!missions) missions = new Missions({ scene, world, graph, landmarks: LANDMARKS, toast }); missions.attach(player, sel.car); if (!signal) signal = new Signal(sound); signal.attach(player.car, sel.car);
-  if (new URLSearchParams(location.search).has('debug')) window.__bd = { input, missions, player, state, graph, world, traffic };
-  $('menu').classList.add('hidden'); $('backGame').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); input.calibrateTilt(); sound.start(); toast('Bonne route !', 'good', 2.5);
+  if (!missions) missions = new Missions({ scene, world, graph, landmarks: LANDMARKS, toast }); missions.attach(player, sel.car); missions.onRideDone = ok => { if (ok) missionDone(); }; if (!police) police = new Police({ scene, world, graph, models, sound, toast }); police.reset(); police.hush(false); if (ambience) ambience.hush(false); if (!signal) signal = new Signal(sound); signal.attach(player.car, sel.car);
+  if (new URLSearchParams(location.search).has('debug')) window.__bd = { input, missions, player, state, graph, world, traffic, camera, scene };
+  $('menu').classList.add('hidden'); $('backGame').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); input.calibrateTilt(); sound.setVehicle(sel.car); sound.start(); toast('Bonne route !', 'good', 2.5);
 }
 async function setTilt(on) {
   if (on) { const ok = await input.enableTilt(); if (!ok) { $('tilt').checked = false; $('btnTilt').classList.remove('on'); toast('Capteur d\'inclinaison indisponible sur cet appareil', 'bad', 3); return; } toast('📱 Volant activé : tiens le téléphone droit, puis tourne-le', 'good', 3); }
@@ -211,9 +215,9 @@ function setupEntryFullscreen() {   // dès le premier toucher (le navigateur ex
   const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) && !navigator.standalone && !document.fullscreenEnabled && !document.webkitFullscreenEnabled; let seen = false; try { seen = localStorage.getItem('bd_ios_tip') === '1'; } catch (e) {}
   if (ios && !seen) { const t = document.createElement('div'); t.id = 'iosTip'; t.innerHTML = '<span>Pour jouer en plein écran : touche <b>Partager</b> puis <b>Sur l\u2019écran d\u2019accueil</b>, et lance le jeu depuis cette icône.</span><button aria-label="Fermer">\u2715</button>'; t.querySelector('button').onclick = () => { t.remove(); try { localStorage.setItem('bd_ios_tip', '1'); } catch (e) {} }; document.body.appendChild(t); }
 }
-function pause(on) { if (!state.running) return; if (BM.open) closeMap(); state.paused = on; $('pause').classList.toggle('hidden', !on); if (on) { sound.horn(false); input.keys.clear(); const T = input.touch; T.gas = T.brake = 0; T.hand = false; T.steer = 0; T.active = false; input.ptr.clear(); } }
-function toMenu() { pause(false); if (missions) missions.ui.card.style.visibility = 'hidden'; state.running = false; $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('menu').classList.remove('hidden'); showView('home'); if (player) $('backGame').classList.remove('hidden'); sound.horn(false); }
-function backToGame() { if (!player) return; if (missions) missions.ui.card.style.visibility = ''; showView('home'); $('menu').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); }
+function pause(on) { if (!state.running) return; pauseSpeech(on); if (police) police.hush(on); if (ambience) ambience.hush(on); if (BM.open) closeMap(); state.paused = on; $('pause').classList.toggle('hidden', !on); if (on) { sound.horn(false); input.keys.clear(); const T = input.touch; T.gas = T.brake = 0; T.hand = false; T.steer = 0; T.active = false; input.ptr.clear(); } }
+function toMenu() { pause(false); stopSpeech(); if (police) police.hush(true); if (ambience) ambience.hush(true); if (missions) missions.ui.card.style.visibility = 'hidden'; state.running = false; $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('menu').classList.remove('hidden'); showView('home'); if (player) $('backGame').classList.remove('hidden'); sound.horn(false); sessionEnded(); }
+function backToGame() { if (!player) return; if (police) police.hush(false); if (ambience) ambience.hush(false); if (missions) missions.ui.card.style.visibility = ''; showView('home'); $('menu').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); }
 
 // ---------------- parcours : accueil → garage → moment → départ ----------------
 const BLURB = { taxi: 'Le jaune de Bamako, partout, tout le temps.', sedan: 'Confortable et stable sur les grands boulevards.', suv: 'Haut sur roues, il passe partout.', pickup: 'Une grande benne pour tout transporter.', sotrama: 'Le minibus vert, toujours plein de monde.', truck: 'Lent, lourd, impressionnant.', moto: 'Agile, parfaite pour se faufiler dans la ville.', tricycle: 'Le petit utilitaire des quartiers.' };
@@ -282,6 +286,7 @@ const PAD = { prev: {}, cur: null };
 const padVisible = el => !!el && el.getClientRects().length > 0;
 function padContainer() {
   if ($('nameGate')) return null;
+  if ($('fbGate')) return $('fbGate');
   if (!$('pause').classList.contains('hidden')) return $('pause');
   if (!$('menu').classList.contains('hidden')) return { home: $('vHome'), garage: $('vGarage'), moment: $('vMoment'), depart: $('vDepart') }[$('menu').dataset.view] || null;
   return null;
@@ -348,9 +353,9 @@ function frame(now) {
   if (state.running && !state.paused) {
     const e = input.takeEdges(); if (e.pause) pause(true); if (e.cam) state.cam = (state.cam + 1) % 3; if (e.lights) { state.lights = state.lights === null ? !(lightK() > 0.35) : !state.lights; toast(state.lights ? 'Phares allumés' : 'Phares éteints', '', 1.2); } if (e.reset) { const sp = startPosNear(); player.reset(sp.x, sp.z, sp.yaw); toast('Remis sur la route', '', 1.4); } if (e.time) { const order = ['jour', 'soir', 'nuit']; const cur = atmo.elev > 0.2 ? 0 : atmo.elev > -0.08 ? 1 : 2; atmo.setPreset(order[(cur + 1) % 3]); toast('Moment : ' + order[(cur + 1) % 3], '', 1.4); }
     if (signal) { if (e.sigL) signal.toggle(-1); if (e.sigR) signal.toggle(1); }
-    const inp = input.poll(dt); if (signal) signal.update(dt, inp.steer, player.speed); if (missions) missions.update(dt, inp, { kmh: Math.round(player.speed*3.6), limit: curLimit }); player.world.night = lightK(); player.update(dt, inp, traffic); world.update(player.x, player.z); player.hornT = inp.horn ? 1 : 0;
+    const inp = input.poll(dt); if (signal) signal.update(dt, inp.steer, player.speed); if (missions) missions.update(dt, inp, { kmh: Math.round(player.speed*3.6), limit: curLimit }); player.world.night = lightK(); player.update(dt, inp, traffic); if (police) police.update(dt, player, traffic); world.update(player.x, player.z); player.hornT = inp.horn ? 1 : 0;
     const horn = e.horn || input.keys.has('KeyH'); sound.horn(horn); if (horn) state.honk = 1;
-    atmo.update(dt, camera.position.lengthSq() ? camera.position : player.car.root.position); updateNightLights(dt); updateCamera(dt); if (traffic) traffic.update(dt, lightK(), camera); updateHud(dt);
+    atmo.update(dt, camera.position.lengthSq() ? camera.position : player.car.root.position); updateNightLights(dt); updateCamera(dt); if (traffic) traffic.update(dt, lightK(), camera); if (!ambience && sound.ctx) ambience = new CityAmbience(sound); if (ambience && traffic) ambience.update(dt, player, traffic.agents); updateHud(dt);
     sound.update(player.speed, player.rpm, inp.throttle, player.drift, atmo.night); atmo.shadowR = prof.shadowR; shadowAt(player.car.root.position);
   } else if (EX.on) { exploreFrame(dt);
   } else if (!state.running && world) { // menu: slow orbit above the city
@@ -360,7 +365,7 @@ function frame(now) {
   if (bats && atmo) { const f = state.running && player ? player.car.root.position : EX.on ? _bf.set(EX.tx, EX.ty, EX.tz) : _bf.set(PLACES[sel.place].x, 20, PLACES[sel.place].z); bats.update(dt, f, atmo.elev, camera.position); }
   if (BM.open && (BM.dirty || (now|0) % 3 === 0)) drawBigMap();
   renderer.render(scene, camera);
-  fpsT += dt; const f = dyn.tick(dt); if (f && new URLSearchParams(location.search).has('fps')) { $('fps').classList.remove('hidden'); $('fps').textContent = Math.round(f) + ' fps · x' + dyn.cur.toFixed(2) + ' · tiles ' + world.tiles.size + (traffic ? ' · ai ' + traffic.count : ''); }
+  fpsT += dt; const f = dyn.tick(dt); if (f) state.fps = f; if (f && new URLSearchParams(location.search).has('fps')) { $('fps').classList.remove('hidden'); $('fps').textContent = Math.round(f) + ' fps · x' + dyn.cur.toFixed(2) + ' · tiles ' + world.tiles.size + (traffic ? ' · ai ' + traffic.count : ''); }
 }
 function startPosNear() { const n = graph.nearest(player.x, player.z, 80, e => e.level === 0 && e.rank >= 1 && !e.bridge) || graph.nearest(player.x, player.z, 400, e => e.level === 0 && !e.bridge); const e = n.edge, i = Math.min(Math.max(n.i, 2), e.n - 3); return { x: graph.px(e, i), z: graph.pz(e, i), yaw: graph.heading(e, i) }; }
 
@@ -409,6 +414,7 @@ function exploreFrame(dt) {
   if (EX.fly) { const k = 1 - Math.exp(-dt*4), dx = (EX.fly.x - T.x)*k, dz = (EX.fly.z - T.z)*k; T.x += dx; T.z += dz; camera.position.x += dx; camera.position.z += dz; _off.copy(camera.position).sub(T); const d = _off.length(), nd = d + (EX.fly.d - d)*k; camera.position.copy(T).addScaledVector(_off.normalize(), nd); if (Math.abs(EX.fly.x - T.x) + Math.abs(EX.fly.z - T.z) < 2) EX.fly = null; }
   const g = world.ground(T.x, T.z, null); if (g !== null) { const dy = (g - T.y)*Math.min(1, dt*3); T.y += dy; camera.position.y += dy; }
   input.poll(dt);   // lit la manette (sticks / croix) même hors conduite
+  { const L = input.look; if (L.mx || L.my) { /* stick gauche : balade au-dessus de la ville, dans l'axe de la caméra */ EX.fly = null; let fx = T.x - camera.position.x, fz = T.z - camera.position.z; const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl; const sp = (60 + EX.dist*0.55)*dt, mx = (fx*-L.my + -fz*L.mx)*sp, mz = (fz*-L.my + fx*L.mx)*sp; T.x += mx; T.z += mz; camera.position.x += mx; camera.position.z += mz; } }
   { const L = input.look; if (L.on || L.zoom) { _off.copy(camera.position).sub(T); const sp = new THREE.Spherical().setFromVector3(_off); sp.theta -= L.x*dt*1.6; sp.phi = Math.max(0.12, Math.min(1.5, sp.phi + L.y*dt*0.9)); sp.radius = Math.max(60, Math.min(6000, sp.radius*(1 - L.zoom*dt*0.9))); camera.position.copy(T).add(_off.setFromSpherical(sp)); } }
   c.update(); const gc = world.ground(camera.position.x, camera.position.z, null); if (gc !== null && camera.position.y < gc + 25) camera.position.y = gc + 25;
   EX.tx = T.x; EX.tz = T.z; EX.ty = T.y; EX.dist = camera.position.distanceTo(T);
@@ -427,7 +433,19 @@ function exploreFrame(dt) {
   prog(0.05, 'Chargement de la ville…'); await world.init(); prog(0.2, 'Chargement des véhicules…'); models = await new Models().load(); prog(0.4, 'Réseau routier…'); graph = await new Graph().load(); const river = await fetch('data/river.json').then(r => r.json()).catch(() => null); graph.renderMap(-2450, -2800, 4900, 5600, 5, river);
   prog(0.7, 'Circulation…'); try { const m = await import('./traffic.js'); traffic = new m.Traffic(scene, world, graph, models, prof); await traffic.init(); traffic.onPedHit = () => { penalty(20, 'Piéton renversé'); if (missions) missions.onPedHit(); }; } catch (e) { console.warn('traffic unavailable', e); }
   bats = new Bats(scene, world, prof.bats || 150); setupBeacons();
+  { // retours des joueurs : formulaire relié au tableur Google (js/feedback.js)
+    let wasPaused = false; const qn = () => Object.keys(PROFILES).find(k => PROFILES[k] === prof) || 'auto', where = () => { let b = null, bd = 450*450; for (const l of LANDMARKS) { const d = (l.x - player.x)**2 + (l.z - player.z)**2; if (d < bd) { bd = d; b = l; } } return b ? b.name : 'Bamako'; };
+    initFeedback({
+      onOpen: () => { wasPaused = state.paused; state.paused = true; if (sound) sound.horn(false); input.keys.clear(); const T = input.touch; T.gas = T.brake = 0; T.hand = false; },
+      onClose: () => { input.keys.clear(); input.takeEdges(); state.paused = wasPaused; },
+      isPlaying: () => state.running && !state.paused,
+      isCalm: () => state.running && !state.paused && !(player && player.speed > 6) && !(missions && missions.ui && missions.ui.card && missions.ui.card.style.visibility !== 'hidden' && missions.active),
+      context: () => ({ vehicle: NAMES[sel.car] || sel.car, place: state.running && player ? where() : '', time: document.getElementById('clockPeriod') ? $('clockPeriod').textContent.split(' ')[0] : '', quality: qn(), fps: state.fps || 0, pos: state.running && player ? Math.round(player.x) + ',' + Math.round(-player.z) : '', screen: innerWidth + 'x' + innerHeight, version: String((world && world.man && world.man.v) || ''), cash: missions ? missions.ui.cash : 0 }),
+    });
+    for (const id of ['hudFeedback', 'fbPause', 'fbHome']) { const b = $(id); if (b) b.onclick = () => openFeedback({ trigger: id === 'hudFeedback' ? 'bouton jeu' : id === 'fbPause' ? 'pause' : 'menu' }); }
+    mountMenuCard();
+  }
   buildMenu(); setupBigMap(); prog(1, 'Prêt'); $('play').disabled = false; $('exploreBtn').disabled = false; $('play').textContent = 'JOUER'; state.ready = true; requestAnimationFrame(frame); setTimeout(() => { $('splash').classList.add('out'); setTimeout(() => $('splash').remove(), 700); startPlayers(); }, 900);
-  window.__game = { get player() { return player; }, get atmo() { return atmo; }, get world() { return world; }, get traffic() { return traffic; }, get bats() { return bats; }, sel, state, begin, startExplore, stopExplore, EX, get camera() { return camera; } };
+  window.__game = { get ambience() { return ambience; }, get police() { return police; }, get player() { return player; }, get atmo() { return atmo; }, get world() { return world; }, get traffic() { return traffic; }, get bats() { return bats; }, sel, state, begin, startExplore, stopExplore, EX, get camera() { return camera; } };
   if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

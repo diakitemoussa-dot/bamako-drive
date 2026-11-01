@@ -4,6 +4,7 @@
 //   taxi, berline, 4x4 → course (TaxiRide)   sotrama → ligne à arrêts (SotramaLine)   moto, tricycle, pick-up, camion → livraison (Delivery)
 import * as THREE from 'three';
 import { MissionUI } from './ui.js';
+import { reaction } from './voice.js';
 import { Door, Figure, Crate } from './passenger.js';
 import { TaxiRide, RING_R, STOP_V } from './taxi.js';
 import { SotramaLine, DOOR_CFG } from './sotrama.js';
@@ -71,9 +72,9 @@ export class Missions {
   _removeDest() { if (this.destRing) { this.scene.remove(this.destRing); this.destRing = null; } }
 
   // ---------- événements du jeu ----------
-  onCrash(v) { if (this.ride) this.ride.hurt(Math.min(25, v*2.2)*(this.vip ? 1.5 : 1), 'Aïe ! Doucement !'); }
-  onPedHit() { if (this.ride) this.ride.hurt(40, 'Tu as renversé quelqu\'un !'); }
-  rideDone() { this.spawnT = 6; }
+  onCrash(v) { if (this.ride) this.ride.hurt(Math.min(25, v*2.2)*(this.vip ? 1.5 : 1), reaction('crash')); }
+  onPedHit() { if (this.ride) this.ride.hurt(40, reaction('ped')); }
+  rideDone(ok) { this.spawnT = 6; if (this.onRideDone) this.onRideDone(ok); }
 
   // ---------- boucle ----------
   /** inp : entrées du joueur (modifiées si le véhicule doit être immobilisé) ; ex : { kmh, limit } */

@@ -1,6 +1,7 @@
 // Une course de taxi : machine à états  aller vers la portière → monter → marchander → conduire → descendre → payer.
 import { planTrip, follow, distTxt } from './route.js';
 import { fairPrice, choices, react, tipFor, fmt } from './fare.js';
+import { react as say, reaction } from './voice.js';
 
 const WALK = 1.5, SEAT = [-0.55, 0.35], DOOR_X = -0.62;   // SEAT : [avant/arrière, droite] dans le repère de la voiture
 export const RING_R = 4, STOP_V = 1.5;                  // rayon du cercle jaune (m) ; vitesse max pour s'arrêter dedans (m/s)
@@ -25,7 +26,7 @@ export class TaxiRide {
     const t = planTrip(this.E, this.p, 700, 3600, 500); if (!t) return false;
     this.dest = t.dest; this.route = t.route; this.routeI = 0; this.fair = fairPrice(t.route.len*(this.E.vip ? 1.4 : 1)); return true;
   }
-  hurt(n, why) { if (this.phase !== 'drive') return; this.client.patience = Math.max(0, this.client.patience - n); if (why) this.E.toast(why, 'bad', 1.6); }
+  hurt(n, why) { if (this.phase !== 'drive') return; this.client.patience = Math.max(0, this.client.patience - n); if (why) { this.E.toast(why, 'bad', 1.6); say(this.client.name, why); } }
 
   // ---------- déplacement du client ----------
   _walk(dt, tx, tz, speed = WALK) {
@@ -97,7 +98,7 @@ export class TaxiRide {
   // ---------- trajet ----------
   _drive(dt, ex) {
     const E = this.E, p = this.p, c = this.client; this.driveT += dt;
-    if (ex.limit != null && ex.kmh > ex.limit + 14) { this.hurt(2.2*dt); this.speedT = (this.speedT || 0) - dt; if (this.speedT <= 0) { this.speedT = 6; E.toast('Ralentis, s\'il te plaît !', 'bad', 1.6); } }
+    if (ex.limit != null && ex.kmh > ex.limit + 14) { this.hurt(2.2*dt); this.speedT = (this.speedT || 0) - dt; if (this.speedT <= 0) { this.speedT = 6; { const l = reaction('fast'); E.toast(l, 'bad', 1.6); say(this.client.name, l); } } }
     if (this.driveT > 45 + this.route.len/8) this.hurt(1*dt);        // course trop longue : le client s'impatiente
     const f = follow(E, this, p, dt), dd = f.dd;
     E.ui.setGuide(this.dest.name, distTxt(dd), f.rel, 'dest'); E.ui.setPatience(c.patience, fmt(this.price));

@@ -62,6 +62,12 @@ export class Player {
     const w = this.world, f = [Math.cos(this.yaw), Math.sin(this.yaw)], r = [-f[1], f[0]], hl = this.len*0.5 - 0.15, hw = this.wid*0.5 - 0.1;
     // buildings / water / fences: a solid cell blocks the car unless a deck at the car's height carries it over (bridge, flyover)
     if (!this.onDeck) for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [-1, 0], [0, 1], [0, -1]]) { const px = this.x + f[0]*hl*a + r[0]*hw*b, pz = this.z + f[1]*hl*a + r[1]*hw*b; if (w.solid(px, pz) && w.deckAt(px, pz, this.y, this.onDeck ? 2.6 : 1.6) === null) return true; }
+    // bord de pont / de remblai sans garde-corps : mur invisible, la voiture ne passe pas par-dessus (chute de plus de 2 m)
+    const gc = w.ground(this.x, this.z, this.y, this.onDeck ? 2.4 : 1.5);
+    if (gc !== null && gc > this.y - 0.7 && this.y > -0.5) for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [-1, 0]]) {
+      const px = this.x + f[0]*hl*a + r[0]*hw*b, pz = this.z + f[1]*hl*a + r[1]*hw*b, g2 = w.ground(px, pz, this.y, this.onDeck ? 2.4 : 1.5);
+      if (g2 !== null && g2 < this.y - 2.0 && w.tileAt(px, pz)) return true;
+    }
     // poles, lamp posts, trunks, signs
     let hit = false; const y = this.y;
     w.forColliders(this.x, this.z, this.len*0.5 + 2.5, (cx, cz, cr, y0, y1) => { if (hit || y1 < y + 0.2 || y0 > y + 1.6) return; const dx = cx - this.x, dz = cz - this.z, lx = dx*f[0] + dz*f[1], lz = dx*r[0] + dz*r[1]; if (Math.abs(lx) < hl + cr && Math.abs(lz) < hw + cr) hit = true; });

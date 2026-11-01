@@ -2,6 +2,7 @@
 import { Figure } from './passenger.js';
 import { findRoute, laneNear, randomStop, nearestLandmark, follow, distTxt } from './route.js';
 import { fmt } from './fare.js';
+import { react as say, reaction } from './voice.js';
 import { RING_R, STOP_V } from './taxi.js';
 import { SOTRAMA_CALLS } from './scenarios.js';
 
@@ -55,7 +56,7 @@ export class SotramaLine {
     this.idx++;
     for (;;) { const s = this.stops[this.idx], n0 = laneNear(E.graph, this.p.x, this.p.z, 60), r = n0 && findRoute(E.graph, n0.edge, n0.i, s.e, s.i);
       if (r && r.len > 120) { this.route = r; this.routeI = 0; this.dest = s; break; } this.stops.splice(this.idx, 1); if (this.idx >= this.stops.length) { this._finish(); return; } }
-    this.phase = 'drive'; E.toast('Prochain arrêt : ' + this.dest.name, '', 2.2);
+    this.phase = 'drive'; E.toast('Prochain arrêt : ' + this.dest.name, '', 2.2); say('L’apprenti', 'Prochain arrêt : ' + this.dest.name + ' !');
   }
   _finish() {
     const E = this.E, bonus = this.angry ? 0 : Math.round(this.earned*0.3*this.satisf/100/50)*50;
@@ -64,14 +65,14 @@ export class SotramaLine {
     this.phase = 'done'; E.ui.hideAll(); E.rideDone(!this.angry);
   }
 
-  hurt(n, why) { if (this.phase !== 'drive') return; this.satisf = Math.max(0, this.satisf - n*0.8); if (why) this.E.toast('Les passagers râlent !', 'bad', 1.6); }
+  hurt(n, why) { if (this.phase !== 'drive') return; this.satisf = Math.max(0, this.satisf - n*0.8); if (why) { const l = reaction('crowd'); this.E.toast('Les passagers râlent : ' + l, 'bad', 1.6); say('Passagers', l); } }
 
   // ---------- boucle ----------
   update(dt, inp, ex) {
     const E = this.E, p = this.p; this.t += dt; let lock = this.phase === 'service';
     if (this.phase === 'service') this._service(dt);
     else if (this.phase === 'drive') {
-      if (ex.limit != null && ex.kmh > ex.limit + 14) this.hurt(1.8*dt);
+      if (ex.limit != null && ex.kmh > ex.limit + 14) { this.hurt(1.8*dt); this.speedT = (this.speedT || 0) - dt; if (this.speedT <= 0) { this.speedT = 6; const l = reaction('fast'); E.toast(l, 'bad', 1.6); say('Passagers', l); } }
       const f = follow(E, this, p, dt); E.ui.setGuide('Arrêt ' + (this.idx + 1) + '/' + this.stops.length + ' · ' + this.dest.name, distTxt(f.dd), f.rel, 'dest');
       E.ui.setPatience(this.satisf, this.pax.length + '/' + CAP + ' · ' + fmt(this.earned), '🚌');
       if (this.satisf <= 0) { this.phase = 'angry'; this.angry = true; E.ui.say('Passagers', 'Arrête-toi ! On descend, tu conduis trop mal !'); }

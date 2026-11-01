@@ -2,7 +2,7 @@
 const round250 = v => Math.max(250, Math.round(v/250)*250);
 export const fmt = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' FCFA';
 
-const NAMES_F = ['Awa', 'Fatoumata', 'Mariam', 'Aminata', 'Oumou', 'Kadiatou', 'Rokia', 'Nana'];
+export const NAMES_F = ['Awa', 'Fatoumata', 'Mariam', 'Aminata', 'Oumou', 'Kadiatou', 'Rokia', 'Nana'];
 const NAMES_M = ['Mamadou', 'Ibrahim', 'Seydou', 'Adama', 'Moussa', 'Bakary', 'Boubacar', 'Souleymane'];
 
 /** prix « normal » d'une course : prise en charge + kilomètre (arrondi à 250 FCFA) */

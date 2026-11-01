@@ -68,11 +68,11 @@ export class Input {
     if (k.has('ArrowLeft') || k.has('KeyA') || k.has('KeyQ')) steer -= 1; if (k.has('ArrowRight') || k.has('KeyD')) steer += 1;
     if (k.has('ArrowUp') || k.has('KeyW') || k.has('KeyZ')) th = 1; if (k.has('ArrowDown') || k.has('KeyS')) br = 1; if (k.has('Space')) hand = true;
     const gp = readPad();
-    this.look.x = this.look.y = 0; this.look.zoom = 0; this.look.on = false;
+    this.look.x = this.look.y = 0; this.look.zoom = 0; this.look.on = false; this.look.mx = this.look.my = 0;
     if (gp) { const B = i => !!(gp.buttons[i] && gp.buttons[i].pressed);   // manette standard : 12 haut, 13 bas, 14 gauche, 15 droite
       if (B(14)) steer -= 1; if (B(15)) steer += 1; steer += (v => Math.abs(v) < 0.12 ? 0 : Math.sign(v)*(Math.abs(v) - 0.12)/0.88)(gp.axes[0] || 0); /* stick gauche = volant (progressif) */ if (B(12)) th = 1; if (B(13)) br = 1; this.look.zoom = (B(12) ? 1 : 0) - (B(13) ? 1 : 0);
       const dz = v => Math.abs(v) < 0.16 ? 0 : Math.sign(v)*(Math.abs(v) - 0.16)/0.84, lx = dz(gp.axes[2] || 0), ly = dz(gp.axes[3] || 0);   // stick droit : tourner la vue ; stick gauche : volant (voir plus bas)
-      this.look.x = Math.max(-1, Math.min(1, lx)); this.look.y = Math.max(-1, Math.min(1, ly)); this.look.on = !!(this.look.x || this.look.y);
+      this.look.x = Math.max(-1, Math.min(1, lx)); this.look.y = Math.max(-1, Math.min(1, ly)); this.look.on = !!(this.look.x || this.look.y); this.look.mx = dz(gp.axes[0] || 0); this.look.my = dz(gp.axes[1] || 0);   // stick gauche : balade (utilisé en exploration)
       const rt = gp.buttons[7] ? gp.buttons[7].value : 0, lt = gp.buttons[6] ? gp.buttons[6].value : 0; th = Math.max(th, rt); br = Math.max(br, lt); if (gp.buttons[0] && gp.buttons[0].pressed) hand = true;
       { const l1 = !!(gp.buttons[4] && gp.buttons[4].pressed), r1 = !!(gp.buttons[5] && gp.buttons[5].pressed); if (l1 && !this._g4) this.edge.sigL = true; if (r1 && !this._g5) this.edge.sigR = true; this._g4 = l1; this._g5 = r1; }   // L1 / R1 : clignotants
       if (gp.buttons[3] && gp.buttons[3].pressed && !this._g3) this.edge.cam = true; this._g3 = gp.buttons[3] && gp.buttons[3].pressed; if (gp.buttons[2] && gp.buttons[2].pressed && !this._g2) this.edge.horn = true; this._g2 = gp.buttons[2] && gp.buttons[2].pressed; }

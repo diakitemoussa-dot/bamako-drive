@@ -32,6 +32,7 @@ CE QU'IL Y A DANS LE JEU
 ------------------------
 - La ville de Bamako (4,7 x 5,2 km) : 15 000 bâtiments, 830 km de voies, le Niger, ponts, échangeurs, ronds-points, monuments.
 - 8 véhicules jouables : taxi, berline, 4x4, pick-up, sotrama, camion, moto Jakarta, tricycle (physique propre à chacun).
+- Piétons : ils marchent sur l'accotement, à côté du goudron (masque de la chaussée data/roadmask.bin.gz, généré depuis Blender), attendent au bord de la route aux passages piétons, et n'utilisent pas les carrefours géants sans bord repérable.
 - Code de la route pour les véhicules IA (js/traffic_rules.js) : arrêt complet aux panneaux STOP (≥ 1,2 s) puis passage seulement si la voie prioritaire est libre ; ralentissement et priorité au cédez-le-passage (l'attente maximale baisse l'exigence) ; arrêt devant tout piéton ; passages piétons sans feu où les piétons traversent quand la route est libre ; limitations de vitesse respectées (les voitures ne dépassent plus la limite).
 - Circulation IA : voitures, sotramas, taxis, motos qui se faufilent, camions et tricycles lents ; priorités, feux, piétons qui traversent.
 - 84 carrefours à feux tricolores, 1 079 panneaux (vitesse, stop, cédez le passage, passage piétons).

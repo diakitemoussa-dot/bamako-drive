@@ -78,6 +78,7 @@ export class Atmosphere {
     // la lumière « sun » est aussi celle de la lune la nuit : une seule carte d'ombre, jamais de recompilation de shaders
     { const sg = se >= 0 ? 1 : -1, hl = Math.hypot(this.sunDir.x, this.sunDir.z) || 1, sinK = Math.max(Math.abs(se), KEY_MIN), cosK = Math.sqrt(1 - sinK*sinK); this.keyDir.set(sg*this.sunDir.x/hl*cosK, sinK, sg*this.sunDir.z/hl*cosK); }
     if (se >= 0) { this.sun.color.setRGB(1.0, 0.93 - 0.35*low, 0.84 - 0.55*low); this.sun.intensity = 3.4*smooth(0.0, 0.18, se); } else { this.sun.color.setRGB(0.5, 0.61, 0.84); this.sun.intensity = 0.55*night*(1 - smooth(-0.12, 0, se)); }   // la lune prend le relais progressivement (pas de saut d'ombre au coucher du soleil)
+    shared.uSunDir.value.copy(this.keyDir); shared.uSunCol.value.setRGB(this.sun.color.r, this.sun.color.g, this.sun.color.b).multiplyScalar(this.sun.intensity/3.4);   // eau : eclat du soleil (ou de la lune)
     this.setShadowRange(this.shadowR); this.sun.position.copy(focus).addScaledVector(this.keyDir, this._sr*2 + 170); this.sun.target.position.copy(focus);
     this.moon.position.copy(focus).addScaledVector(this.sunDir, -250); this.moon.target.position.copy(focus); this.moon.intensity = 0;
     this.hemi.intensity = 0.28 + 0.8*day; this.hemi.color.setRGB(0.52 + 0.28*day, 0.6 + 0.3*day, 0.85 + 0.15*day); this.hemi.groundColor.setRGB(0.25 + 0.18*day, 0.2 + 0.16*day, 0.16 + 0.13*day);

@@ -160,3 +160,36 @@ body.touch #mBtns kbd { display:none; }
 /* ---------- clignotants ---------- */
 #sig { position:absolute; left:0; right:0; top:-34px; display:flex; justify-content:space-between; pointer-events:none; } #sig span { font-size:26px; line-height:1; color:rgba(248,243,234,.28); text-shadow:none; transition:color .05s; } #sig span.on { color:#4ee05c; text-shadow:0 0 10px #4ee05c; }
 #sideBtns .sigBtn { min-width:0; font-size:15px; padding:5px 11px; text-align:center; } #sideBtns .sigBtn.on { background:#2d8a3a; border-color:#4ee05c; }
+
+/* ---------- retours des joueurs ---------- */
+#fbGate { position:fixed; inset:0; z-index:95; display:flex; align-items:center; justify-content:center; padding:12px; background:rgba(43,32,48,.88); backdrop-filter:blur(6px); overflow:auto; }
+#fbGate .panel { width:min(500px,100%); text-align:center; max-height:100%; overflow:auto; } #fbGate h2 { margin:0 0 4px; font-size:23px; color:var(--cream); }
+#fbStars { display:flex; justify-content:center; gap:6px; margin:6px 0 10px; } #fbStars button { background:none; border:none; font-size:42px; line-height:1; color:rgba(248,243,234,.28); cursor:pointer; padding:0 4px; touch-action:manipulation; } #fbStars button.on { color:var(--gold); text-shadow:0 0 12px rgba(249,213,139,.5); } #fbStars button:focus-visible { outline:2px solid var(--lilac); border-radius:10px; }
+#fbCats { justify-content:center; flex-wrap:wrap; margin-bottom:8px; } #fbCats button.on { background:var(--gold); color:var(--plum); border-color:var(--gold); }
+#fbMsg { width:100%; box-sizing:border-box; padding:11px 13px; border-radius:16px; border:2px solid var(--lilac); background:var(--cream); color:var(--plum); font:500 15px Lato, sans-serif; resize:vertical; min-height:84px; } #fbMsg:focus { outline:none; border-color:var(--gold); }
+#fbCount { text-align:right; color:var(--dim); font-size:11px; margin:2px 4px 6px; } #fbGate .check { display:flex; gap:8px; align-items:flex-start; text-align:left; font-size:12.5px; color:var(--dim); margin:4px 0 8px; } #fbGate .check input { margin-top:2px; }
+#fbErr { min-height:18px; color:#ffb4a8; font-size:13px; font-weight:700; margin-bottom:4px; }
+#fbInvite { position:fixed; left:50%; bottom:calc(16px + var(--safe-b)); transform:translateX(-50%); z-index:60; display:flex; align-items:center; gap:10px; background:var(--panel); border:2px solid var(--gold); border-radius:18px; padding:8px 10px 8px 16px; font-size:14px; color:var(--cream); box-shadow:0 8px 24px rgba(0,0,0,.4); max-width:94vw; } #fbInvite .cta { height:38px; font-size:13px; padding:0 14px; white-space:nowrap; } #fbInvite .back { padding:6px 10px; }
+#fbCard { margin-top:14px; padding:12px 12px 10px; border-radius:18px; border:2px solid var(--gold); background:rgba(249,213,139,.1); text-align:center; transition:box-shadow .3s; } #fbCard.hot { animation:fbPulse 1.6s ease-in-out infinite; }
+@keyframes fbPulse { 0%,100% { box-shadow:0 0 0 0 rgba(249,213,139,.5); } 50% { box-shadow:0 0 0 9px rgba(249,213,139,0); } }
+#fbCard .fbT { font-family:Rubik, Lato, sans-serif; font-weight:700; font-size:17px; color:var(--gold); } #fbCard .fbS { font-size:13px; color:var(--cream); margin:3px 0 8px; } #fbCard.done .fbEmo { display:none; }
+.fbEmo { display:flex; justify-content:center; gap:6px; } .fbEmoBtn { flex:1; max-width:70px; display:flex; flex-direction:column; align-items:center; gap:1px; padding:6px 2px; border-radius:14px; border:1px solid rgba(195,165,199,.45); background:rgba(248,243,234,.09); color:var(--cream); touch-action:manipulation; } .fbEmoBtn span { font-size:30px; line-height:1.1; } .fbEmoBtn small { font-size:10px; color:var(--dim); } .fbEmoBtn:hover:not(:disabled), .fbEmoBtn.on { background:var(--gold); border-color:var(--gold); } .fbEmoBtn:hover small, .fbEmoBtn.on small { color:var(--plum); }
+#fbHome, #fbPause { display:block; width:100%; margin-top:10px; padding:11px; border-radius:14px; border:2px solid var(--gold); background:transparent; color:var(--gold); font-family:Rubik, Lato, sans-serif; font-weight:600; font-size:14px; touch-action:manipulation; } #fbPause { background:var(--gold); color:var(--plum); font-size:15px; margin-top:12px; }
+#fbInvite { flex-direction:column; align-items:stretch; padding:12px 14px; gap:8px; } #fbInvite .fbInvT { font-weight:700; text-align:center; } .fbInvRow { display:flex; justify-content:space-between; gap:8px; } .fbLink { background:none; border:0; color:var(--gold); text-decoration:underline; font-size:13px; padding:6px; }
+#hudFeedback { background:var(--gold) !important; color:var(--plum) !important; font-weight:700; box-shadow:0 0 0 2px rgba(249,213,139,.35); }
+@media (max-height:520px) { #fbGate h2 { font-size:18px; } #fbGate .sub { display:none; } #fbStars button { font-size:32px; } #fbMsg { min-height:56px; rows:2; } }
+@media (max-width:760px) { #hudFeedback { padding:7px 7px; font-size:11px; } }
+/* police : compteur de collisions / poursuite */
+#polBadge { position:fixed; left:50%; top:calc(62px + var(--safe-t)); transform:translateX(-50%); z-index:7; padding:5px 14px; border-radius:14px; background:var(--panel); border:2px solid var(--gold); color:var(--cream); font:700 13px Rubik, Lato, sans-serif; letter-spacing:.04em; pointer-events:none; } #polBadge.hidden { display:none; }
+#polBadge.chase { border-color:#ff4a3a; animation:polFlash .5s steps(2) infinite; } @keyframes polFlash { 0% { box-shadow:0 0 14px 2px rgba(255,60,40,.9); } 50% { box-shadow:0 0 14px 2px rgba(60,90,255,.9); } }
+#mPadHint { margin-top:8px; text-align:center; font-size:12px; color:var(--dim); letter-spacing:.04em; }
+#voiceHint { position:fixed; left:50%; top:calc(14px + var(--safe-t)); transform:translateX(-50%); z-index:30; max-width:min(92vw, 520px); padding:10px 16px; border-radius:16px; background:var(--panel); border:2px solid var(--gold); color:var(--cream); font:600 14px Lato, sans-serif; text-align:center; pointer-events:none; box-shadow:0 8px 24px rgba(0,0,0,.4); }
+
+/* --- HUD telephone paysage : plus de chevauchements (guide mission / boutons / cash) --- */
+@media (max-height:520px) {
+  #mGuide { left:calc(124px + var(--safe-l)); transform:none; max-width:186px; }
+  #mGuide b { max-width:120px; }
+  #mCash { top:calc(52px + var(--safe-t)); }
+  body #sideBtns, body.touch #sideBtns { left:calc(196px + var(--safe-l)); transform:none; top:calc(98px + var(--safe-t)); flex-wrap:wrap; max-width:calc(100vw - 196px - 120px); }
+  #toast { top:calc(60px + var(--safe-t)); }
+}

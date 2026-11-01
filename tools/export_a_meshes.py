@@ -43,6 +43,18 @@ def mat_table(m):
             elif b is not None: const = linked_color(b.inputs["Base Color"].links[0].from_node)   # couleur venant d'un nœud Mix / RGB (motifs procéduraux)
     if const is None and lut is None: const = tuple(m.diffuse_color[:3])
     return cls, lut, const
+def split_big(T, maxe):
+    """coupe les grands triangles (l'eau du fleuve en a de 100 000 m2) en morceaux d'arête <= maxe : un triangle n'est chargé qu'avec la tuile de son centre,
+    donc un grand triangle disparaissait (grand vide dans le fleuve) dès que cette tuile n'était pas chargée. Renvoie (triangles, indice du triangle d'origine)."""
+    idx = np.arange(len(T)); out_t = []; out_i = []
+    while len(T):
+        e = np.stack([np.linalg.norm(T[:, 1] - T[:, 0], axis=1), np.linalg.norm(T[:, 2] - T[:, 1], axis=1), np.linalg.norm(T[:, 0] - T[:, 2], axis=1)], 1)
+        small = e.max(1) <= maxe
+        out_t.append(T[small]); out_i.append(idx[small]); T = T[~small]; idx = idx[~small]; e = e[~small]
+        if not len(T): break
+        k = e.argmax(1); r = np.arange(len(T)); a = T[r, k]; b = T[r, (k + 1) % 3]; c = T[r, (k + 2) % 3]; m = (a + b)/2   # coupe l'arête la plus longue en son milieu
+        T = np.concatenate([np.stack([a, m, c], 1), np.stack([m, b, c], 1)]); idx = np.concatenate([idx, idx])
+    return np.concatenate(out_t), np.concatenate(out_i)
 def srgb(c): return np.where(c <= 0.0031308, c*12.92, 1.055*np.power(np.maximum(c, 1e-6), 1/2.4) - 0.055)
 tiles = collections.defaultdict(lambda: {"pos": [], "col": [], "kpos": [], "kcol": [], "kv": []})
 stats = collections.Counter(); matcache = {}
@@ -72,6 +84,7 @@ for o in bpy.data.objects:
         if cls == 0 and o.name in LANDMARKS: continue          # monument texturé : exporté par export_g_landmarks.py (data/landmarks.glb)
         P = co[tv[sel]]                                                  # (n,3,3) blender xyz
         T = np.stack([P[..., 0], P[..., 2], -P[..., 1]], axis=-1)        # -> three xyz (y up)
+        if cls == 3: T, ridx = split_big(T, 150.0); sel = sel[ridx]    # eau : pas de triangle géant (voir split_big)
         if lut is not None and rnd is not None: base = lut[np.clip((trnd[sel]*255).astype(np.int32), 0, 255)]
         elif lut is not None: base = np.tile(lut[128], (len(sel), 1))
         else: base = np.tile(np.array(const, np.float32), (len(sel), 1))
