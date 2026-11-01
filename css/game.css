@@ -213,3 +213,9 @@ body.touch #mBtns kbd { display:none; }
 @media (max-height:520px) { #arBox { display:grid; grid-template-columns:1fr 1fr; column-gap:14px; text-align:left; padding:12px 14px; width:min(760px, 100%); } #arKicker, #arName, #arMsg, #arGo, #arHint { grid-column:2; } #arKicker { align-self:end; } #arName { margin:0 40px 6px 0; font-size:18px; } #arStage { grid-column:1; grid-row:1 / span 5; height:min(78vh, 300px); } #arGo { height:46px; font-size:15px; margin-top:8px; } #arHint { font-size:11.5px; margin:8px 0 0; } }
 #explore.arOn #exLabels, #explore.arOn #exCard, #explore.arOn #exTools { visibility:hidden; }
 @media (max-width:760px) { #exCard { gap:8px; padding:8px 10px; } #exDrive, #exAR { padding:8px 10px; font-size:13px; white-space:nowrap; } }
+
+/* --- Commandes tactiles : mode boutons (◀ ▶) à la place du volant glissé --- */
+#steerBtns { display:none; position:absolute; left:calc(12px + var(--safe-l)); bottom:calc(12px + var(--safe-b)); gap:12px; align-items:flex-end; pointer-events:none; }
+body.ctl-buttons #steerBtns { display:flex; } body.ctl-buttons #steerZone { display:none; }
+.pedal.steer { width:min(21vh, 118px); height:min(27vh, 150px); font-size:min(7vh, 40px); }
+#sideBtns #btnCtl { border-color:var(--gold); }

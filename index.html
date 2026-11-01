@@ -31,8 +31,9 @@
 
 <div id="touch" class="hidden">
   <div id="steerZone"><div id="wheel"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="8"/><circle cx="50" cy="50" r="9" fill="rgba(255,255,255,.55)"/><path d="M50 50 L50 8 M50 50 L12 72 M50 50 L88 72" stroke="rgba(255,255,255,.55)" stroke-width="7" fill="none"/></svg></div><span class="hint">glisse pour tourner</span></div>
+  <div id="steerBtns"><button id="btnLeft" class="pedal steer" aria-label="Tourner à gauche">◀</button><button id="btnRight" class="pedal steer" aria-label="Tourner à droite">▶</button></div>
   <div id="pedals"><button id="btnBrake" class="pedal">FREIN</button><button id="btnGas" class="pedal gas">GAZ</button></div>
-  <div id="sideBtns"><button id="btnHand">frein main</button><button id="btnHorn">klaxon</button><button id="btnCam">caméra</button><button id="btnSigL" class="sigBtn" aria-label="Clignotant gauche">◀</button><button id="btnSigR" class="sigBtn" aria-label="Clignotant droit">▶</button><button id="btnLights">phares</button><button id="btnTime">heure</button><button id="btnTilt">📱 volant</button><button id="btnReset">remettre</button></div>
+  <div id="sideBtns"><button id="btnHand">frein main</button><button id="btnHorn">klaxon</button><button id="btnCam">caméra</button><button id="btnSigL" class="sigBtn" aria-label="Clignotant gauche">◀</button><button id="btnSigR" class="sigBtn" aria-label="Clignotant droit">▶</button><button id="btnLights">phares</button><button id="btnTime">heure</button><button id="btnCtl" aria-label="Changer de commandes">◀▶ boutons</button><button id="btnTilt">📱 incliner</button><button id="btnReset">remettre</button></div>
 </div>
 
 <div id="bigmap" class="hidden"><canvas id="bigmapCv"></canvas>
@@ -70,10 +71,11 @@
     <div class="steps dark"><span class="done"><b>✓</b>Véhicule</span><span class="done"><b>✓</b>Moment</span><span class="on"><b>3</b>Départ</span></div>
     <div id="recap"></div>
     <div class="row"><label>Départ</label><div id="placeList" class="chips"></div></div>
+    <div class="row hidden" id="ctlRow"><label>Commandes</label><div id="ctlList" class="chips"><button data-c="wheel" class="on">🛞 Volant</button><button data-c="buttons">◀ ▶ Boutons</button></div></div>
     <div class="row"><label>Trafic</label><div id="trafficList" class="chips"><button data-v="0.35">Calme</button><button data-v="0.7" class="on">Normal</button><button data-v="1">Dense</button></div></div>
     <div class="row"><label>Qualité</label><div id="qualList" class="chips"><button data-q="auto" class="on">Auto</button><button data-q="low">Économe</button><button data-q="med">Moyenne</button><button data-q="high">Élevée</button></div></div>
     <div class="row"><label>Clients</label><div id="langList" class="chips"><button data-l="fr" class="on">Français</button><button data-l="bm">Bamanankan</button></div></div>
-    <label class="check hidden" id="tiltRow"><input type="checkbox" id="tilt"> Utiliser mon téléphone comme volant (tourne-le comme un volant, en paysage)</label>
+    <label class="check hidden" id="tiltRow"><input type="checkbox" id="tilt"> Incliner mon téléphone pour tourner (comme un volant, en paysage)</label>
     <div class="ctaRow"><button class="back" data-go="moment">‹ Retour</button><button id="go" class="cta">▶ C'EST PARTI</button></div>
   </div></div>
 </div>
