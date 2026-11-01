@@ -3,6 +3,7 @@
 // Le navigateur n'a pas de voix bambara : on lit le français avec les mots bambara écrits comme ils se prononcent (« I ni ce » -> « i ni tché »).
 // Désactivable : localStorage bd_voice = "off".
 import { NAMES_F } from './fare.js';
+import { tr } from './bambara.js';
 
 const FEM = new Set(NAMES_F);
 const FEM_RE = /hortense|julie|denise|eloise|brigitte|amelie|marie|celine|paulina|female|femme|google fran[cç]ais|aria|sylvie|chantal|lea\b/i;
@@ -35,7 +36,7 @@ let lastReact = 0;
 /** une phrase de réaction au hasard (kind : crash, fast, ped, crowd, corner) */
 export const reaction = kind => { const a = LINES[kind] || LINES.crash; return a[(Math.random()*a.length) | 0]; };
 /** dit une réaction sans couper trop souvent (1,3 s minimum entre deux) */
-export function react(who, text) { const n = performance.now(); if (n - lastReact < 1300) return; lastReact = n; speak(who, text); }
+export function react(who, text) { const n = performance.now(); if (n - lastReact < 1300) return; lastReact = n; speak(who, tr(text).spoken, false, text); }
 /** les mots bambara tels qu'ils se prononcent, et sans emoji */
 const say = t => t.replace(/\bI ni ce\b/gi, 'i ni tché').replace(/\bA(?:ï|i)+e?(?![a-zà-ÿ])/g, 'aïe').replace(/\bOuille\b/gi, 'ouille').replace(/\bFCFA\b/g, 'francs CFA').replace(/\(([^)]*)\)/g, ', $1,').replace(/[\u{1F300}-\u{1FAFF}☀-➿]/gu, '').replace(/\s+/g, ' ').trim();
 /** ton de chaque phrase selon ce qu'elle dit */
@@ -51,7 +52,7 @@ function mood(s) {
 
 // Chrome / Edge n'autorisent la voix qu'après un vrai clic, une touche du clavier ou un toucher : un bouton de manette ne compte pas.
 // Si le joueur n'a jamais cliqué, on le lui dit une fois ; dès son premier clic / touche on débloque la voix et on rejoue la dernière phrase.
-let hint = null, lastWho = '', lastText = '';
+let hint = null, lastWho = '', lastText = '', lastSrc = '';
 const activated = () => !(navigator.userActivation && !navigator.userActivation.hasBeenActive);
 function showHint() {
   if (hint || !document.body) return; hint = document.createElement('div'); hint.id = 'voiceHint'; hint.textContent = '🔊 Pour entendre la voix des clients : clique une fois avec la souris ou appuie sur une touche du clavier'; document.body.appendChild(hint);
@@ -59,19 +60,20 @@ function showHint() {
 function hideHint() { if (hint) { hint.remove(); hint = null; } }
 function unlock() {
   const was = !!hint; hideHint(); if (!synth) return; try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; synth.speak(u); } catch (e) { /* ignoré */ }
-  if (was && lastText) setTimeout(() => speak(lastWho, lastText, true), 150);
+  if (was && lastText) setTimeout(() => speak(lastWho, lastText, true, lastSrc), 150);
 }
 for (const ev of ['pointerdown', 'keydown', 'touchstart']) addEventListener(ev, e => { if (e.isTrusted) unlock(); }, { capture: true });
 export function stopSpeech() { if (synth) { synth.cancel(); } hideHint(); }
 export function pauseSpeech(on) { if (synth) { if (on) synth.pause(); else synth.resume(); } }
 /** dit la phrase de `who` ; coupe la phrase précédente */
-export function speak(who, text, again = false) {
-  if (!synth || !enabled() || !text) return; const now = performance.now(); if (!again && text === last.text && now - last.t < 3000) return; last = { text, t: now }; lastWho = who; lastText = text;
+/** src : la phrase d'origine (française) quand `text` est une traduction — sert à choisir le ton de la voix */
+export function speak(who, text, again = false, src = text) {
+  if (!synth || !enabled() || !text) return; const now = performance.now(); if (!again && text === last.text && now - last.t < 3000) return; last = { text, t: now }; lastWho = who; lastText = text; lastSrc = src;
   if (!activated()) showHint();
   if (!voices.length) load(); const P = profile(who), parts = say(text).match(/[^.!?…]+[.!?…]*/g) || [say(text)];
   if (synth.speaking || synth.pending) synth.cancel(); if (synth.paused) synth.resume();
   parts.forEach((s, i) => {
-    s = s.trim(); if (!s) return; const m = mood(s), q = /\?\s*$/.test(s), u = new SpeechSynthesisUtterance(s);
+    s = s.trim(); if (!s) return; const m = mood(src !== text ? src : s), q = /\?\s*$/.test(s), u = new SpeechSynthesisUtterance(s);
     if (P.voice) { u.voice = P.voice; u.lang = P.voice.lang; } else u.lang = 'fr-FR';
     const jit = (Math.sin(hash(s, i + 5)*6.28))*0.07;   // légère variation d'une phrase à l'autre
     u.pitch = Math.max(0.1, Math.min(2, P.pitch + m.dp + jit + (q ? 0.12 : 0) + (i === 0 && /^(i ni|bonjour)/i.test(s) ? 0.08 : 0))); u.rate = Math.max(0.6, Math.min(1.5, P.rate*m.dr*(q ? 0.97 : 1))); u.volume = m.vol;

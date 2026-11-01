@@ -20,6 +20,7 @@ import { stopSpeech, pauseSpeech } from './missions/voice.js';
 import { initFeedback, openFeedback, missionDone, mountMenuCard, sessionEnded } from './feedback.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { hasAR, openAR, closeAR, arOpen } from './ar.js';
+import { trText, getLang, setLang } from './missions/bambara.js';
 
 const $ = id => document.getElementById(id);
 const PLACES = [
@@ -46,7 +47,7 @@ addEventListener('resize', () => { if (!renderer) return; renderer.setSize(inner
 function checkOrientation() { const portrait = innerHeight > innerWidth*1.05 && input && input.isTouch; $('rotate').classList.toggle('hidden', !portrait); }
 
 // ---------------- toasts / score ----------------
-function toast(msg, kind = '', t = 2.2) { const el = $('toast'); el.textContent = msg; el.className = 'show ' + kind; state.toast = t; }
+function toast(msg, kind = '', t = 2.2) { const el = $('toast'); el.textContent = trText(msg); el.className = 'show ' + kind; state.toast = t; }
 function penalty(n, why) { state.score = Math.max(0, state.score - n); $('scoreVal').textContent = Math.round(state.score); toast('⚠ ' + why + '  -' + n, 'bad'); }
 
 // ---------------- night lights: street lamps (pools + glow), player headlights ----------------
@@ -338,6 +339,7 @@ function buildMenu() {
   const pl = $('placeList'); PLACES.forEach((p, i) => { const b = document.createElement('button'); b.textContent = p.name; if (i === sel.place) b.classList.add('on'); b.onclick = () => { sel.place = i; [...pl.children].forEach(c => c.classList.toggle('on', c === b)); }; pl.appendChild(b); });
   const chips = (id, key, attr, conv = v => v) => { const box = $(id); box.onclick = (e) => { const b = e.target.closest('button'); if (!b) return; sel[key] = conv(b.dataset[attr]); [...box.children].forEach(c => c.classList.toggle('on', c === b)); }; };
   chips('trafficList', 'traffic', 'v', parseFloat); chips('qualList', 'quality', 'q');
+  { const ll = $('langList'); if (ll) [...ll.children].forEach(b => { b.classList.toggle('on', b.dataset.l === getLang()); b.onclick = () => { setLang(b.dataset.l); [...ll.children].forEach(c => c.classList.toggle('on', c === b)); }; }); }   // langue des clients : français / bambara
   $('play').onclick = () => { goFullscreen(); showView('garage'); };
   $('go').onclick = async () => { goFullscreen(); $('go').disabled = true; $('go').textContent = 'Chargement…'; if (sel.quality !== 'auto' && PROFILES[sel.quality] !== prof) await applyQuality(PROFILES[sel.quality]); await begin(); $('go').textContent = "▶ C'EST PARTI"; $('go').disabled = false; };
   $('resume').onclick = () => { pause(false); input.calibrateTilt(); }; $('toMenu').onclick = toMenu; $('backGame').onclick = backToGame; $('hudPause').onclick = () => pause(!state.paused); $('hudMenu').onclick = () => { pause(true); };

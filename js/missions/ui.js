@@ -2,6 +2,7 @@
 import { fmt } from './fare.js';
 import { readPad } from '../input.js';
 import { speak, stopSpeech } from './voice.js';
+import { tr, trText } from './bambara.js';
 const el = (tag, id, html = '', parent = document.getElementById('hud')) => { const e = document.createElement(tag); e.id = id; e.innerHTML = html; parent.appendChild(e); return e; };
 const KEY = 'bd_cash';
 
@@ -36,11 +37,11 @@ export class MissionUI {
   hidePatience() { this.pat.classList.remove('on'); }
   /** bulle de dialogue : who = nom, say = phrase, buttons = [{label, cls}] ; onPick(index) */
   ask(who, say, buttons, onPick) {
-    document.getElementById('mWho').textContent = who; document.getElementById('mSay').textContent = say; speak(who, say); const b = document.getElementById('mBtns'); b.innerHTML = '';
-    buttons.forEach((bt, i) => { const x = document.createElement('button'); x.className = bt.cls || ''; x.innerHTML = (buttons.length > 1 ? '<kbd>' + (i + 1) + '</kbd>' : '') + bt.label; x.onclick = () => { if (this.onPick) onPick(i); }; b.appendChild(x); });
+    const r = tr(say); document.getElementById('mWho').textContent = trText(who); document.getElementById('mSay').textContent = r.text; speak(who, r.spoken, false, say); const b = document.getElementById('mBtns'); b.innerHTML = '';
+    buttons.forEach((bt, i) => { const x = document.createElement('button'); x.className = bt.cls || ''; x.innerHTML = (buttons.length > 1 ? '<kbd>' + (i + 1) + '</kbd>' : '') + trText(bt.label); x.onclick = () => { if (this.onPick) onPick(i); }; b.appendChild(x); });
     this.onPick = onPick; this.card.classList.add('on'); this.sel = buttons.length === 3 ? 1 : 0; this.t0 = performance.now(); this._pp = { a: true, l: true, r: true };   // le prix du milieu est présélectionné ; un bouton déjà enfoncé ne valide pas
   }
-  say(who, say) { document.getElementById('mWho').textContent = who; document.getElementById('mSay').textContent = say; speak(who, say); document.getElementById('mBtns').innerHTML = ''; this.onPick = null; this.card.classList.add('on'); }
+  say(who, say) { const r = tr(say); document.getElementById('mWho').textContent = trText(who); document.getElementById('mSay').textContent = r.text; speak(who, r.spoken, false, say); document.getElementById('mBtns').innerHTML = ''; this.onPick = null; this.card.classList.add('on'); }
   hide() { this.card.classList.remove('on'); this.onPick = null; }
   hideAll() { this.hide(); this.hideGuide(); this.hidePatience(); stopSpeech(); }
 }
