@@ -11,20 +11,29 @@ import { PROFILES, detect, DynRes } from './quality.js';
 import { Sound } from './audio.js';
 import { Radio } from './radio.js';
 import { Bats } from './bats.js';
+import { Missions } from './missions/engine.js';
+import { Signal } from './signal.js';
+import { addLandmarks } from './landmarks.js';
+import { Police } from './police.js';
+import { CityAmbience } from './ambience.js';
+import { stopSpeech, pauseSpeech } from './missions/voice.js';
+import { initFeedback, openFeedback, missionDone, mountMenuCard, sessionEnded } from './feedback.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { hasAR, openAR, closeAR, arOpen } from './ar.js';
+import { trText, getLang, setLang } from './missions/bambara.js';
 
 const $ = id => document.getElementById(id);
 const PLACES = [
   { name: 'Monument de la Paix', x: -843.6, z: 853.8 }, { name: 'Grand Marché', x: 656, z: -586 }, { name: 'Monument de l\'Indépendance', x: -183, z: 212 }, { name: 'Ecobank (Ave de la Nation)', x: -251, z: 337 },
   { name: 'Tour BCEAO', x: 510, z: 705 }, { name: 'Cathédrale', x: 377, z: -520 }, { name: 'Grande Mosquée', x: 1058, z: -880 }, { name: 'Stade Modibo Keïta', x: 1059, z: -2342 }];
-const LANDMARKS = [...PLACES, { name: 'Palais de la Culture', x: 1315, z: 1636 }, { name: 'Azalaï Hôtel', x: -523, z: 1091 }, { name: 'Radisson Collection', x: -1263, z: 1077 }, { name: 'Cité Administrative', x: -768, z: 1170 }, { name: 'Hôtel de l\'Amitié', x: 1034, z: 86 }, { name: 'Hôtel Libya', x: 1060, z: 511 }, { name: 'Gare de Bamako', x: 437, z: -1040 }, { name: 'CHU Gabriel Touré', x: 660, z: -1353 }, { name: 'Musée National', x: 378, z: -2172 }, { name: 'Assemblée Nationale', x: 1016, z: -1046 }, { name: 'Mémorial Modibo Keïta', x: -662, z: 911 }];
+const LANDMARKS = [...PLACES, { name: 'Palais de la Culture', x: 1315, z: 1636 }, { name: 'Azalaï Hôtel', x: -523, z: 1091 }, { name: 'Radisson Collection', x: -1263, z: 1077 }, { name: 'Cité Administrative', x: -768, z: 1170 }, { name: 'Hôtel de l\'Amitié', x: 1034, z: 86 }, { name: 'Hôtel Libya', x: 1060, z: 511 }, { name: 'Gare de Bamako', x: 437, z: -1040 }, { name: 'CHU Gabriel Touré', x: 660, z: -1353 }, { name: 'Musée National', x: 378, z: -2172 }, { name: 'Assemblée Nationale', x: 1016, z: -1046 }, { name: 'Mémorial Modibo Keïta', x: -662, z: 911 }, { name: 'CICB', x: -300, z: 984 }];
 const sel = { car: 'taxi', ci: 0, place: 0, time: 'reel', traffic: 0.7, quality: 'auto' };
 let garage = null;
 const state = { running: false, paused: false, cam: 0, lights: null, hornT: 0, score: 100, toast: 0, ready: false, flying: false };
 
 // ---------------- renderer / scene ----------------
 let prof = PROFILES[detect()]; const urlQ = new URLSearchParams(location.search).get('q'); if (urlQ && PROFILES[urlQ]) prof = PROFILES[urlQ];
-let renderer, scene, camera, world, atmo, models, graph, player, input, sound, dyn, traffic = null, bats = null;
+let renderer, scene, camera, world, atmo, models, graph, player, input, sound, dyn, traffic = null, bats = null, missions = null, signal = null, police = null, ambience = null;
 function createRenderer() {
   if (renderer) renderer.dispose();
   renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: prof.antialias, powerPreference: 'high-performance', alpha: false });
@@ -32,23 +41,23 @@ function createRenderer() {
 }
 function setupScene() {
   scene = new THREE.Scene(); camera = new THREE.PerspectiveCamera(64, innerWidth/innerHeight, 0.4, 6000); scene.add(camera);
-  world = new World(scene, prof); atmo = new Atmosphere(scene, renderer, prof); dyn = new DynRes(renderer, prof.pixelRatio);
+  world = new World(scene, prof); addLandmarks(scene, prof); atmo = new Atmosphere(scene, renderer, prof); dyn = new DynRes(renderer, prof.pixelRatio);
 }
 addEventListener('resize', () => { if (!renderer) return; renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); checkOrientation(); });
 function checkOrientation() { const portrait = innerHeight > innerWidth*1.05 && input && input.isTouch; $('rotate').classList.toggle('hidden', !portrait); }
 
 // ---------------- toasts / score ----------------
-function toast(msg, kind = '', t = 2.2) { const el = $('toast'); el.textContent = msg; el.className = 'show ' + kind; state.toast = t; }
+function toast(msg, kind = '', t = 2.2) { const el = $('toast'); el.textContent = trText(msg); el.className = 'show ' + kind; state.toast = t; }
 function penalty(n, why) { state.score = Math.max(0, state.score - n); $('scoreVal').textContent = Math.round(state.score); toast('⚠ ' + why + '  -' + n, 'bad'); }
 
 // ---------------- night lights: street lamps (pools + glow), player headlights ----------------
 let lampPool = null, lampGlow = null, headSpots = [], cones = null;
-function glowTexture() { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'), r = g.createRadialGradient(64, 64, 2, 64, 64, 62); r.addColorStop(0, 'rgba(255,235,190,1)'); r.addColorStop(0.25, 'rgba(255,210,140,.55)'); r.addColorStop(1, 'rgba(255,190,100,0)'); g.fillStyle = r; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); }
+function glowTexture() { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'), r = g.createRadialGradient(64, 64, 2, 64, 64, 62); r.addColorStop(0, 'rgba(255,190,100,1)'); r.addColorStop(0.25, 'rgba(255,140,50,.6)'); r.addColorStop(1, 'rgba(255,100,20,0)'); /* lampadaires orange (sodium) */ g.fillStyle = r; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); }
 function setupLights() {
   const tex = glowTexture(); const pg = new THREE.PlaneGeometry(1, 1); pg.rotateX(-Math.PI/2);
-  lampPool = new THREE.InstancedMesh(pg, new THREE.MeshBasicMaterial({ map: tex, color: 0xffd9a0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0 }), 2500); lampPool.frustumCulled = false; lampPool.count = 0; scene.add(lampPool);
+  lampPool = new THREE.InstancedMesh(pg, new THREE.MeshBasicMaterial({ map: tex, color: 0xff9c45, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0 }), 2500); lampPool.frustumCulled = false; lampPool.count = 0; scene.add(lampPool);
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(2500*3), 3));
-  lampGlow = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size: 8.5, sizeAttenuation: true, color: 0xffe2b0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0 })); lampGlow.frustumCulled = false; scene.add(lampGlow);
+  lampGlow = new THREE.Points(geo, new THREE.PointsMaterial({ map: tex, size: 8.5, sizeAttenuation: true, color: 0xffa650, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0 })); lampGlow.frustumCulled = false; scene.add(lampGlow);
   world.onTilesChanged = refreshLamps;
   for (let i = 0; i < 2; i++) { const s = new THREE.SpotLight(0xfff0d0, 0, 95, 0.52, 0.55, 1.2); s.castShadow = false; scene.add(s); scene.add(s.target); headSpots.push(s); }
 }
@@ -121,6 +130,7 @@ function drawMap() {
   const c = $('minimap'); if (!mapCtx) mapCtx = c.getContext('2d'); const g = mapCtx, W = c.width, [x0, z0, sc] = graph.mapOrg, R = 360/2; g.save(); g.clearRect(0, 0, W, W); g.beginPath(); g.arc(R, R, R, 0, Math.PI*2); g.clip(); g.fillStyle = '#3b2c42'; g.fillRect(0, 0, W, W);
   const zoom = 1.4/ (1 + Math.min(player.speed, 40)*0.01); g.translate(R, R*1.25); g.rotate(-player.yaw - Math.PI/2); g.scale(zoom, zoom); g.drawImage(graph.mapCanvas, -(player.x - x0)/sc, -(player.z - z0)/sc);
   if (traffic) { g.fillStyle = 'rgba(248,243,234,.85)'; for (const p of traffic.nearPositions(260)) g.fillRect((p[0] - player.x)/sc - 1, (p[1] - player.z)/sc - 1, 2.2, 2.2); }
+  if (missions) missions.drawMini(g, sc);
   g.setTransform(1, 0, 0, 1, 0, 0); g.beginPath(); g.moveTo(R, R*1.25 - 13); g.lineTo(R + 9, R*1.25 + 10); g.lineTo(R, R*1.25 + 5); g.lineTo(R - 9, R*1.25 + 10); g.closePath(); g.fillStyle = '#F9D58B'; g.fill(); g.strokeStyle = '#55415D'; g.lineWidth = 3; g.stroke(); g.restore();
 }
 
@@ -144,7 +154,7 @@ function setupBigMap() {
     p[0] = e.clientX; p[1] = e.clientY; BM.dirty = true; });
   const up = e => { BM.ptr.delete(e.pointerId); BM.pinch = 0; cv.style.cursor = 'grab'; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   cv.addEventListener('wheel', e => { e.preventDefault(); zoomMap(e.deltaY < 0 ? 1.2 : 1/1.2, e.clientX, e.clientY); }, { passive: false });
-  addEventListener('keydown', e => { if (EX.on && e.code === 'Escape') { stopExplore(); return; } if (state.running && !e.repeat && e.code === 'KeyN' && radio.on) radio.next(); if (!state.running || e.repeat) return; if (e.code === 'KeyM') { BM.open ? closeMap() : openMap(); } else if (e.code === 'Escape' || e.code === 'KeyP') { if (BM.open) closeMap(); else pause(!state.paused); } });
+  addEventListener('keydown', e => { if (EX.on && e.code === 'Escape') { if (arOpen()) closeAR(); else stopExplore(); return; } if (state.running && !e.repeat && e.code === 'KeyN' && radio.on) radio.next(); if (!state.running || e.repeat) return; if (e.code === 'KeyF' && !/^(INPUT|TEXTAREA)$/.test((e.target && e.target.tagName) || '')) { openFeedback({ trigger: 'touche F' }); return; } if (e.code === 'KeyM') { BM.open ? closeMap() : openMap(); } else if (e.code === 'Escape' || e.code === 'KeyP') { if (BM.open) closeMap(); else pause(!state.paused); } });
   addEventListener('resize', () => { if (BM.open) sizeBigMap(); });
 }
 function drawBigMap() {
@@ -158,6 +168,7 @@ function drawBigMap() {
     if (showAll || PLACES.includes(l)) { const w = g.measureText(l.name).width; g.fillStyle = 'rgba(85,65,93,.85)'; g.beginPath(); g.roundRect(sx + 9*d, sy - 10*d, w + 12*d, 20*d, 8*d); g.fill(); g.fillStyle = '#F8F3EA'; g.fillText(l.name, sx + 15*d, sy + 1*d); } }
   // other vehicles
   if (traffic && BM.z > 0.12) { g.fillStyle = 'rgba(248,243,234,.8)'; for (const p of traffic.nearPositions(700)) { const [sx, sy] = S(p[0], p[1]); g.fillRect(sx - d, sy - d, 2*d, 2*d); } }
+  if (missions) missions.drawBig(g, S, d);
   // me
   const [px, py] = S(player.x, player.z); g.save(); g.translate(px, py); g.rotate(player.yaw + Math.PI/2); g.fillStyle = '#F9D58B'; g.strokeStyle = '#55415D'; g.lineWidth = 3*d; g.beginPath(); g.moveTo(0, -13*d); g.lineTo(9*d, 10*d); g.lineTo(0, 5*d); g.lineTo(-9*d, 10*d); g.closePath(); g.fill(); g.stroke(); g.restore();
   g.fillStyle = 'rgba(85,65,93,.9)'; g.font = `700 ${Math.round(11*d)}px Lato, sans-serif`; g.fillStyle = '#F8F3EA'; g.textAlign = 'left';
@@ -181,16 +192,27 @@ async function begin() {
   const sp = startPos(); world.update(sp.x, sp.z, true);
   await new Promise(res => { const t0 = performance.now(); const chk = () => { const loaded = world.tiles.size, want = Math.min(4, world.index.size); if ((world.tileAt(sp.x, sp.z) && world.loading.size === 0) || performance.now() - t0 > 12000) res(); else setTimeout(chk, 80); }; chk(); });
   if (player) { scene.remove(player.car.root); }
-  const cols = models.kinds[sel.car].colors, color = cols[sel.ci % cols.length]; const g = world.ground(sp.x, sp.z, null) ?? 20; player = new Player(models, world, sel.car, color, { x: sp.x, y: g, z: sp.z }, sp.yaw); scene.add(player.car.root); player.onCrash = (v) => { shake = Math.min(0.6, v*0.04); sound.crash(v); penalty(Math.min(8, Math.round(v*0.6)), 'Collision'); };
+  const cols = models.kinds[sel.car].colors, color = cols[sel.ci % cols.length]; const g = world.ground(sp.x, sp.z, null) ?? 20; player = new Player(models, world, sel.car, color, { x: sp.x, y: g, z: sp.z }, sp.yaw); scene.add(player.car.root); player.onCrash = (v) => { shake = Math.min(0.6, v*0.04); sound.crash(v); penalty(Math.min(8, Math.round(v*0.6)), 'Collision'); if (missions) missions.onCrash(v); if (police) police.noteCrash(); };
   player.car.setPose(sp.x, g, sp.z, sp.yaw, 0, 0); camPos.set(sp.x - Math.cos(sp.yaw)*8, g + 4, sp.z - Math.sin(sp.yaw)*8); camLook.set(sp.x, g + 1, sp.z); camYaw = sp.yaw;
   if (sel.time === 'auto') { atmo.hours = 9.5; atmo.auto = true; } else if (sel.time === 'reel') { atmo.hours = bamakoHours(); atmo.auto = false; } else { atmo.setPreset(sel.time); }
   atmo.update(0, new THREE.Vector3(sp.x, g, sp.z)); state.lights = null; state.score = 100; $('scoreVal').textContent = 100;
   if (traffic) traffic.start(sp, sel.traffic, player);
-  $('menu').classList.add('hidden'); $('backGame').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); input.calibrateTilt(); sound.start(); toast('Bonne route !', 'good', 2.5);
+  if (!missions) missions = new Missions({ scene, world, graph, landmarks: LANDMARKS, toast }); missions.attach(player, sel.car); missions.onRideDone = ok => { if (ok) missionDone(); }; if (!police) police = new Police({ scene, world, graph, models, sound, toast }); police.reset(); police.hush(false); if (ambience) ambience.hush(false); if (!signal) signal = new Signal(sound); signal.attach(player.car, sel.car);
+  if (new URLSearchParams(location.search).has('debug')) window.__bd = { input, missions, player, state, graph, world, traffic, camera, scene };
+  $('menu').classList.add('hidden'); $('backGame').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); input.calibrateTilt(); sound.setVehicle(sel.car); sound.start(); toast('Bonne route !', 'good', 2.5);
+}
+/** commandes tactiles : 'wheel' (volant glissé) ou 'buttons' (◀ ▶). quiet : sans message. Choix mémorisé (bd_ctl). */
+function setCtl(mode, quiet) {
+  mode = mode === 'buttons' ? 'buttons' : 'wheel'; input.setCtl(mode); document.body.classList.toggle('ctl-buttons', mode === 'buttons');
+  if (mode === 'buttons' && input.tilt.on) setTilt(false);   // l'inclinaison pilote le volant : incompatible avec les boutons
+  document.querySelectorAll('#ctlList button').forEach(b => b.classList.toggle('on', b.dataset.c === mode));
+  const b = $('btnCtl'); if (b) b.textContent = mode === 'buttons' ? '🛞 volant' : '◀▶ boutons';
+  try { localStorage.setItem('bd_ctl', mode); } catch (e) {}
+  if (!quiet) toast(mode === 'buttons' ? '◀ ▶ Boutons : touche les flèches pour tourner' : '🛞 Volant : glisse le doigt à gauche pour tourner', 'good', 2.4);
 }
 async function setTilt(on) {
-  if (on) { const ok = await input.enableTilt(); if (!ok) { $('tilt').checked = false; $('btnTilt').classList.remove('on'); toast('Capteur d\'inclinaison indisponible sur cet appareil', 'bad', 3); return; } toast('📱 Volant activé : tiens le téléphone droit, puis tourne-le', 'good', 3); }
-  else { input.disableTilt(); const w = $('wheel'); if (w) w.style.transform = 'rotate(0deg)'; toast('Volant à l\'écran', '', 1.6); }
+  if (on) { const ok = await input.enableTilt(); if (!ok) { $('tilt').checked = false; $('btnTilt').classList.remove('on'); toast('Capteur d\'inclinaison indisponible sur cet appareil', 'bad', 3); return; } if (input.ctl === 'buttons') setCtl('wheel', true); toast('📱 Inclinaison activée : tiens le téléphone droit, puis tourne-le', 'good', 3); }
+  else { input.disableTilt(); const w = $('wheel'); if (w) w.style.transform = 'rotate(0deg)'; toast(input.ctl === 'buttons' ? 'Boutons à l\'écran' : 'Volant à l\'écran', '', 1.6); }
   $('tilt').checked = on; $('btnTilt').classList.toggle('on', on); try { localStorage.setItem('tilt', on ? '1' : '0'); } catch (e) {}
 }
 function goFullscreen() {   // téléphones : plein écran (barre du navigateur masquée) puis verrouillage en paysage — Android/Chrome ; iPhone/Safari ne propose ni l'un ni l'autre (voir l'astuce « écran d'accueil »)
@@ -204,9 +226,9 @@ function setupEntryFullscreen() {   // dès le premier toucher (le navigateur ex
   const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) && !navigator.standalone && !document.fullscreenEnabled && !document.webkitFullscreenEnabled; let seen = false; try { seen = localStorage.getItem('bd_ios_tip') === '1'; } catch (e) {}
   if (ios && !seen) { const t = document.createElement('div'); t.id = 'iosTip'; t.innerHTML = '<span>Pour jouer en plein écran : touche <b>Partager</b> puis <b>Sur l\u2019écran d\u2019accueil</b>, et lance le jeu depuis cette icône.</span><button aria-label="Fermer">\u2715</button>'; t.querySelector('button').onclick = () => { t.remove(); try { localStorage.setItem('bd_ios_tip', '1'); } catch (e) {} }; document.body.appendChild(t); }
 }
-function pause(on) { if (!state.running) return; if (BM.open) closeMap(); state.paused = on; $('pause').classList.toggle('hidden', !on); if (on) { sound.horn(false); input.keys.clear(); const T = input.touch; T.gas = T.brake = 0; T.hand = false; T.steer = 0; T.active = false; input.ptr.clear(); } }
-function toMenu() { pause(false); state.running = false; $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('menu').classList.remove('hidden'); showView('home'); if (player) $('backGame').classList.remove('hidden'); sound.horn(false); }
-function backToGame() { if (!player) return; showView('home'); $('menu').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); }
+function pause(on) { if (!state.running) return; pauseSpeech(on); if (police) police.hush(on); if (ambience) ambience.hush(on); if (BM.open) closeMap(); state.paused = on; $('pause').classList.toggle('hidden', !on); if (on) { sound.horn(false); input.keys.clear(); const T = input.touch; T.gas = T.brake = 0; T.hand = false; T.steer = 0; T.active = false; input.ptr.clear(); } }
+function toMenu() { pause(false); stopSpeech(); if (police) police.hush(true); if (ambience) ambience.hush(true); if (missions) missions.ui.card.style.visibility = 'hidden'; state.running = false; $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('menu').classList.remove('hidden'); showView('home'); if (player) $('backGame').classList.remove('hidden'); sound.horn(false); sessionEnded(); }
+function backToGame() { if (!player) return; if (police) police.hush(false); if (ambience) ambience.hush(false); if (missions) missions.ui.card.style.visibility = ''; showView('home'); $('menu').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); }
 
 // ---------------- parcours : accueil → garage → moment → départ ----------------
 const BLURB = { taxi: 'Le jaune de Bamako, partout, tout le temps.', sedan: 'Confortable et stable sur les grands boulevards.', suv: 'Haut sur roues, il passe partout.', pickup: 'Une grande benne pour tout transporter.', sotrama: 'Le minibus vert, toujours plein de monde.', truck: 'Lent, lourd, impressionnant.', moto: 'Agile, parfaite pour se faufiler dans la ville.', tricycle: 'Le petit utilitaire des quartiers.' };
@@ -275,6 +297,7 @@ const PAD = { prev: {}, cur: null };
 const padVisible = el => !!el && el.getClientRects().length > 0;
 function padContainer() {
   if ($('nameGate')) return null;
+  if ($('fbGate')) return $('fbGate');
   if (!$('pause').classList.contains('hidden')) return $('pause');
   if (!$('menu').classList.contains('hidden')) return { home: $('vHome'), garage: $('vGarage'), moment: $('vMoment'), depart: $('vDepart') }[$('menu').dataset.view] || null;
   return null;
@@ -325,12 +348,16 @@ function buildMenu() {
   const pl = $('placeList'); PLACES.forEach((p, i) => { const b = document.createElement('button'); b.textContent = p.name; if (i === sel.place) b.classList.add('on'); b.onclick = () => { sel.place = i; [...pl.children].forEach(c => c.classList.toggle('on', c === b)); }; pl.appendChild(b); });
   const chips = (id, key, attr, conv = v => v) => { const box = $(id); box.onclick = (e) => { const b = e.target.closest('button'); if (!b) return; sel[key] = conv(b.dataset[attr]); [...box.children].forEach(c => c.classList.toggle('on', c === b)); }; };
   chips('trafficList', 'traffic', 'v', parseFloat); chips('qualList', 'quality', 'q');
+  { const ll = $('langList'); if (ll) [...ll.children].forEach(b => { b.classList.toggle('on', b.dataset.l === getLang()); b.onclick = () => { setLang(b.dataset.l); [...ll.children].forEach(c => c.classList.toggle('on', c === b)); }; }); }   // langue des clients : français / bambara
   $('play').onclick = () => { goFullscreen(); showView('garage'); };
   $('go').onclick = async () => { goFullscreen(); $('go').disabled = true; $('go').textContent = 'Chargement…'; if (sel.quality !== 'auto' && PROFILES[sel.quality] !== prof) await applyQuality(PROFILES[sel.quality]); await begin(); $('go').textContent = "▶ C'EST PARTI"; $('go').disabled = false; };
   $('resume').onclick = () => { pause(false); input.calibrateTilt(); }; $('toMenu').onclick = toMenu; $('backGame').onclick = backToGame; $('hudPause').onclick = () => pause(!state.paused); $('hudMenu').onclick = () => { pause(true); };
   setupRadio(); $('exploreBtn').onclick = startExplore; setupExplore();
   $('fsBtn').onclick = () => { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el); };
-  if (input.isTouch) { $('helpPC').classList.add('hidden'); $('helpTouch').classList.remove('hidden'); if (typeof DeviceOrientationEvent !== 'undefined') $('tiltRow').classList.remove('hidden'); $('tilt').onchange = e => setTilt(e.target.checked); $('btnTilt').addEventListener('pointerdown', e => { e.preventDefault(); setTilt(!input.tilt.on); }); } else $('btnTilt').classList.add('hidden');
+  if (input.isTouch) { $('helpPC').classList.add('hidden'); $('helpTouch').classList.remove('hidden'); if (typeof DeviceOrientationEvent !== 'undefined') $('tiltRow').classList.remove('hidden'); $('tilt').onchange = e => setTilt(e.target.checked); $('btnTilt').addEventListener('pointerdown', e => { e.preventDefault(); setTilt(!input.tilt.on); });
+    $('ctlRow').classList.remove('hidden'); document.querySelectorAll('#ctlList button').forEach(b => { b.onclick = () => setCtl(b.dataset.c); }); $('btnCtl').addEventListener('pointerdown', e => { e.preventDefault(); setCtl(input.ctl === 'buttons' ? 'wheel' : 'buttons'); });
+    { let m = 'wheel'; try { m = localStorage.getItem('bd_ctl') === 'buttons' ? 'buttons' : 'wheel'; } catch (e) {} setCtl(m, true); }
+  } else { $('btnTilt').classList.add('hidden'); $('btnCtl').classList.add('hidden'); }
 }
 async function applyQuality(p) { prof = p; createRenderer(); const keep = { hours: atmo.hours, auto: atmo.auto }; while (scene.children.length) scene.remove(scene.children[0]); setupScene(); atmo.hours = keep.hours; atmo.auto = keep.auto; setupLights(); await world.init(); if (beaconGlow) { scene.add(beaconGlow); scene.add(beaconLight); } if (traffic) traffic.rebind(scene, world, prof); if (bats) { bats.max = prof.bats || 150; bats.rebind(scene, world); } if (player) scene.add(player.car.root); scene.add(camera); }
 
@@ -340,9 +367,10 @@ function frame(now) {
   shared.uTime.value = now/1000;
   if (state.running && !state.paused) {
     const e = input.takeEdges(); if (e.pause) pause(true); if (e.cam) state.cam = (state.cam + 1) % 3; if (e.lights) { state.lights = state.lights === null ? !(lightK() > 0.35) : !state.lights; toast(state.lights ? 'Phares allumés' : 'Phares éteints', '', 1.2); } if (e.reset) { const sp = startPosNear(); player.reset(sp.x, sp.z, sp.yaw); toast('Remis sur la route', '', 1.4); } if (e.time) { const order = ['jour', 'soir', 'nuit']; const cur = atmo.elev > 0.2 ? 0 : atmo.elev > -0.08 ? 1 : 2; atmo.setPreset(order[(cur + 1) % 3]); toast('Moment : ' + order[(cur + 1) % 3], '', 1.4); }
-    const inp = input.poll(dt); player.world.night = lightK(); player.update(dt, inp, traffic); world.update(player.x, player.z); player.hornT = inp.horn ? 1 : 0;
+    if (signal) { if (e.sigL) signal.toggle(-1); if (e.sigR) signal.toggle(1); }
+    const inp = input.poll(dt); if (signal) signal.update(dt, inp.steer, player.speed); if (missions) missions.update(dt, inp, { kmh: Math.round(player.speed*3.6), limit: curLimit }); player.world.night = lightK(); player.update(dt, inp, traffic); if (police) police.update(dt, player, traffic); world.update(player.x, player.z); player.hornT = inp.horn ? 1 : 0;
     const horn = e.horn || input.keys.has('KeyH'); sound.horn(horn); if (horn) state.honk = 1;
-    atmo.update(dt, camera.position.lengthSq() ? camera.position : player.car.root.position); updateNightLights(dt); updateCamera(dt); if (traffic) traffic.update(dt, lightK(), camera); updateHud(dt);
+    atmo.update(dt, camera.position.lengthSq() ? camera.position : player.car.root.position); updateNightLights(dt); updateCamera(dt); if (traffic) traffic.update(dt, lightK(), camera); if (!ambience && sound.ctx) ambience = new CityAmbience(sound); if (ambience && traffic) ambience.update(dt, player, traffic.agents); updateHud(dt);
     sound.update(player.speed, player.rpm, inp.throttle, player.drift, atmo.night); atmo.shadowR = prof.shadowR; shadowAt(player.car.root.position);
   } else if (EX.on) { exploreFrame(dt);
   } else if (!state.running && world) { // menu: slow orbit above the city
@@ -352,7 +380,7 @@ function frame(now) {
   if (bats && atmo) { const f = state.running && player ? player.car.root.position : EX.on ? _bf.set(EX.tx, EX.ty, EX.tz) : _bf.set(PLACES[sel.place].x, 20, PLACES[sel.place].z); bats.update(dt, f, atmo.elev, camera.position); }
   if (BM.open && (BM.dirty || (now|0) % 3 === 0)) drawBigMap();
   renderer.render(scene, camera);
-  fpsT += dt; const f = dyn.tick(dt); if (f && new URLSearchParams(location.search).has('fps')) { $('fps').classList.remove('hidden'); $('fps').textContent = Math.round(f) + ' fps · x' + dyn.cur.toFixed(2) + ' · tiles ' + world.tiles.size + (traffic ? ' · ai ' + traffic.count : ''); }
+  fpsT += dt; const f = dyn.tick(dt); if (f) state.fps = f; if (f && new URLSearchParams(location.search).has('fps')) { $('fps').classList.remove('hidden'); $('fps').textContent = Math.round(f) + ' fps · x' + dyn.cur.toFixed(2) + ' · tiles ' + world.tiles.size + (traffic ? ' · ai ' + traffic.count : ''); }
 }
 function startPosNear() { const n = graph.nearest(player.x, player.z, 80, e => e.level === 0 && e.rank >= 1 && !e.bridge) || graph.nearest(player.x, player.z, 400, e => e.level === 0 && !e.bridge); const e = n.edge, i = Math.min(Math.max(n.i, 2), e.n - 3); return { x: graph.px(e, i), z: graph.pz(e, i), yaw: graph.heading(e, i) }; }
 
@@ -375,12 +403,13 @@ function setupExplore() {
   $('exQuit').onclick = () => stopExplore(); $('exIn').onclick = () => exZoom(0.7); $('exOut').onclick = () => exZoom(1/0.7); $('exL').onclick = () => exOrbit(-0.45, 0); $('exR').onclick = () => exOrbit(0.45, 0);
   $('exUp').onclick = () => exOrbit(0, 0.2); $('exDown').onclick = () => exOrbit(0, -0.2);
   $('exTime').onclick = () => { EX.timeIdx = (EX.timeIdx + 1) % 3; atmo.setPreset(EX_TIMES[EX.timeIdx][0]); $('exTime').textContent = EX_TIMES[EX.timeIdx][1]; };
+  $('exAR').onclick = () => { if (EX.sel >= 0) openAR(LANDMARKS[EX.sel].name); }; $('arClose').onclick = closeAR; $('arSheet').addEventListener('pointerdown', e => { if (e.target === $('arSheet')) closeAR(); });
   $('exDrive').onclick = () => { if (EX.sel < 0) return; sel.place = EX.sel; document.querySelectorAll('#placeList button').forEach((b, i) => b.classList.toggle('on', i === sel.place)); stopExplore(true); $('go').click(); };
 }
 const _off = new THREE.Vector3(), _sph = new THREE.Spherical();
 function exZoom(f) { if (!EX.ctl) return; _off.copy(camera.position).sub(EX.ctl.target); const d = Math.max(EX.ctl.minDistance, Math.min(EX.ctl.maxDistance, _off.length()*f)); camera.position.copy(EX.ctl.target).addScaledVector(_off.normalize(), d); }
 function exOrbit(dTheta, dPhi) { if (!EX.ctl) return; _off.copy(camera.position).sub(EX.ctl.target); _sph.setFromVector3(_off); _sph.theta += dTheta; _sph.phi = Math.max(EX.ctl.minPolarAngle, Math.min(EX.ctl.maxPolarAngle, _sph.phi - dPhi)); camera.position.copy(EX.ctl.target).add(_off.setFromSpherical(_sph)); }
-function exSelect(i) { EX.sel = i; const l = LANDMARKS[i]; EX.labels.forEach((o, k) => o.el.classList.toggle('on', k === i)); $('exName').textContent = l.name; $('exCard').classList.remove('hidden'); EX.fly = { x: l.x, z: l.z, d: Math.min(camera.position.distanceTo(EX.ctl.target), 420) }; }
+function exSelect(i) { EX.sel = i; const l = LANDMARKS[i]; EX.labels.forEach((o, k) => o.el.classList.toggle('on', k === i)); $('exName').textContent = l.name; $('exCard').classList.remove('hidden'); $('exAR').classList.add('hidden'); hasAR(l.name).then(ok => { if (EX.sel === i) $('exAR').classList.toggle('hidden', !ok); }); EX.fly = { x: l.x, z: l.z, d: Math.min(camera.position.distanceTo(EX.ctl.target), 420) }; }
 function startExplore() {
   if (!state.ready || EX.on) return; EX.on = true; state.running = false;
   EX.saved = { r: prof.tileRadius, far: atmo.fog.far, hours: atmo.hours, auto: atmo.auto }; prof.tileRadius = prof === PROFILES.low ? 1000 : 1500; atmo.fog.far = 3800; atmo.explore = true; atmo.auto = false; const tm = sel.time === 'reel' ? modeOfHours(bamakoHours()) : sel.time; EX.timeIdx = tm === 'soir' ? 1 : tm === 'nuit' ? 2 : 0; atmo.setPreset(EX_TIMES[EX.timeIdx][0]); $('exTime').textContent = EX_TIMES[EX.timeIdx][1];
@@ -391,7 +420,7 @@ function startExplore() {
   const c = EX.ctl = new OrbitControls(camera, $('exPad')); c.target.set(EX.tx, g0, EX.tz); c.enableDamping = true; c.dampingFactor = 0.09; c.rotateSpeed = 0.75; c.zoomSpeed = 1.1; c.panSpeed = 0.9; c.minDistance = 70; c.maxDistance = 3600; c.minPolarAngle = 0.12; c.maxPolarAngle = 1.46; c.screenSpacePanning = false; c.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }; c.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }; c.update();
 }
 function stopExplore(toGame) {
-  if (!EX.on) return; EX.on = false; if (traffic) traffic.endExplore(toGame ? null : player); if (EX.ctl) { EX.ctl.dispose(); EX.ctl = null; } $('explore').classList.add('hidden'); prof.tileRadius = EX.saved.r; atmo.fog.far = EX.saved.far; atmo.explore = false; atmo.auto = EX.saved.auto; if (!toGame) atmo.hours = EX.saved.hours; camera.far = 6000; camera.fov = 64; camera.updateProjectionMatrix(); world.update(EX.tx, EX.tz, true);
+  if (!EX.on) return; EX.on = false; closeAR(); if (traffic) traffic.endExplore(toGame ? null : player); if (EX.ctl) { EX.ctl.dispose(); EX.ctl = null; } $('explore').classList.add('hidden'); prof.tileRadius = EX.saved.r; atmo.fog.far = EX.saved.far; atmo.explore = false; atmo.auto = EX.saved.auto; if (!toGame) atmo.hours = EX.saved.hours; camera.far = 6000; camera.fov = 64; camera.updateProjectionMatrix(); world.update(EX.tx, EX.tz, true);
   if (!toGame) { $('menu').classList.remove('hidden'); if (player) $('backGame').classList.remove('hidden'); }
 }
 const _v = new THREE.Vector3(), _bf = new THREE.Vector3();
@@ -401,6 +430,7 @@ function exploreFrame(dt) {
   if (EX.fly) { const k = 1 - Math.exp(-dt*4), dx = (EX.fly.x - T.x)*k, dz = (EX.fly.z - T.z)*k; T.x += dx; T.z += dz; camera.position.x += dx; camera.position.z += dz; _off.copy(camera.position).sub(T); const d = _off.length(), nd = d + (EX.fly.d - d)*k; camera.position.copy(T).addScaledVector(_off.normalize(), nd); if (Math.abs(EX.fly.x - T.x) + Math.abs(EX.fly.z - T.z) < 2) EX.fly = null; }
   const g = world.ground(T.x, T.z, null); if (g !== null) { const dy = (g - T.y)*Math.min(1, dt*3); T.y += dy; camera.position.y += dy; }
   input.poll(dt);   // lit la manette (sticks / croix) même hors conduite
+  { const L = input.look; if (L.mx || L.my) { /* stick gauche : balade au-dessus de la ville, dans l'axe de la caméra */ EX.fly = null; let fx = T.x - camera.position.x, fz = T.z - camera.position.z; const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl; const sp = (60 + EX.dist*0.55)*dt, mx = (fx*-L.my + -fz*L.mx)*sp, mz = (fz*-L.my + fx*L.mx)*sp; T.x += mx; T.z += mz; camera.position.x += mx; camera.position.z += mz; } }
   { const L = input.look; if (L.on || L.zoom) { _off.copy(camera.position).sub(T); const sp = new THREE.Spherical().setFromVector3(_off); sp.theta -= L.x*dt*1.6; sp.phi = Math.max(0.12, Math.min(1.5, sp.phi + L.y*dt*0.9)); sp.radius = Math.max(60, Math.min(6000, sp.radius*(1 - L.zoom*dt*0.9))); camera.position.copy(T).add(_off.setFromSpherical(sp)); } }
   c.update(); const gc = world.ground(camera.position.x, camera.position.z, null); if (gc !== null && camera.position.y < gc + 25) camera.position.y = gc + 25;
   EX.tx = T.x; EX.tz = T.z; EX.ty = T.y; EX.dist = camera.position.distanceTo(T);
@@ -417,9 +447,21 @@ function exploreFrame(dt) {
 (async function boot() {
   input = new Input(document.body); if (input.isTouch) document.body.classList.add('touch'); setupEntryFullscreen(); checkOrientation(); sound = new Sound(); createRenderer(); setupScene(); setupLights(); const prog = (f, t) => { $('loadFill').style.width = $('splashFill').style.width = Math.round(f*100) + '%'; $('loadTxt').textContent = $('splashTxt').textContent = t; };
   prog(0.05, 'Chargement de la ville…'); await world.init(); prog(0.2, 'Chargement des véhicules…'); models = await new Models().load(); prog(0.4, 'Réseau routier…'); graph = await new Graph().load(); const river = await fetch('data/river.json').then(r => r.json()).catch(() => null); graph.renderMap(-2450, -2800, 4900, 5600, 5, river);
-  prog(0.7, 'Circulation…'); try { const m = await import('./traffic.js'); traffic = new m.Traffic(scene, world, graph, models, prof); await traffic.init(); traffic.onPedHit = () => penalty(20, 'Piéton renversé'); } catch (e) { console.warn('traffic unavailable', e); }
+  prog(0.7, 'Circulation…'); try { const m = await import('./traffic.js'); traffic = new m.Traffic(scene, world, graph, models, prof); await traffic.init(); traffic.onPedHit = () => { penalty(20, 'Piéton renversé'); if (missions) missions.onPedHit(); }; } catch (e) { console.warn('traffic unavailable', e); }
   bats = new Bats(scene, world, prof.bats || 150); setupBeacons();
+  { // retours des joueurs : formulaire relié au tableur Google (js/feedback.js)
+    let wasPaused = false; const qn = () => Object.keys(PROFILES).find(k => PROFILES[k] === prof) || 'auto', where = () => { let b = null, bd = 450*450; for (const l of LANDMARKS) { const d = (l.x - player.x)**2 + (l.z - player.z)**2; if (d < bd) { bd = d; b = l; } } return b ? b.name : 'Bamako'; };
+    initFeedback({
+      onOpen: () => { wasPaused = state.paused; state.paused = true; if (sound) sound.horn(false); input.keys.clear(); const T = input.touch; T.gas = T.brake = 0; T.hand = false; },
+      onClose: () => { input.keys.clear(); input.takeEdges(); state.paused = wasPaused; },
+      isPlaying: () => state.running && !state.paused,
+      isCalm: () => state.running && !state.paused && !(player && player.speed > 6) && !(missions && missions.ui && missions.ui.card && missions.ui.card.style.visibility !== 'hidden' && missions.active),
+      context: () => ({ vehicle: NAMES[sel.car] || sel.car, place: state.running && player ? where() : '', time: document.getElementById('clockPeriod') ? $('clockPeriod').textContent.split(' ')[0] : '', quality: qn(), fps: state.fps || 0, pos: state.running && player ? Math.round(player.x) + ',' + Math.round(-player.z) : '', screen: innerWidth + 'x' + innerHeight, version: String((world && world.man && world.man.v) || ''), cash: missions ? missions.ui.cash : 0 }),
+    });
+    for (const id of ['hudFeedback', 'fbPause', 'fbHome']) { const b = $(id); if (b) b.onclick = () => openFeedback({ trigger: id === 'hudFeedback' ? 'bouton jeu' : id === 'fbPause' ? 'pause' : 'menu' }); }
+    mountMenuCard();
+  }
   buildMenu(); setupBigMap(); prog(1, 'Prêt'); $('play').disabled = false; $('exploreBtn').disabled = false; $('play').textContent = 'JOUER'; state.ready = true; requestAnimationFrame(frame); setTimeout(() => { $('splash').classList.add('out'); setTimeout(() => $('splash').remove(), 700); startPlayers(); }, 900);
-  window.__game = { get player() { return player; }, get atmo() { return atmo; }, get world() { return world; }, get traffic() { return traffic; }, get bats() { return bats; }, sel, state, begin, startExplore, stopExplore, EX, get camera() { return camera; } };
+  window.__game = { get ambience() { return ambience; }, get police() { return police; }, get player() { return player; }, get atmo() { return atmo; }, get world() { return world; }, get traffic() { return traffic; }, get bats() { return bats; }, sel, state, begin, startExplore, stopExplore, EX, get camera() { return camera; } };
   if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

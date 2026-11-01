@@ -8,6 +8,11 @@ const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xx
 const device = () => { const u = navigator.userAgent; return (/iPhone|iPad/.test(u) ? 'iOS' : /Android/.test(u) ? 'Android' : /Windows/.test(u) ? 'Windows' : /Mac/.test(u) ? 'Mac' : 'Autre') + ' · ' + (matchMedia('(pointer:coarse)').matches ? 'tactile' : 'souris'); };
 const call = (path, body) => fetch(PLAYERS_API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ ...body, action: path.slice(1), device: device() }) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(j => { if (j.error) throw new Error(j.error); return j; });   // text/plain : requête « simple », sans pré-vérification CORS (Google Apps Script)
 
+/** envoi d'un message au tableur (feedback…) : même script que le comptage des joueurs */
+export const sendToSheet = (path, body) => PLAYERS_API ? call(path, body) : Promise.reject(new Error('désactivé'));
+/** identité de l'appareil (créée si besoin, partagée avec le comptage des joueurs) */
+export function getPlayer() { let p = store.get(); if (!p || !p.id) { p = { id: uuid(), name: '', sent: false }; store.set(p); } return p; }
+
 /** à appeler une fois le jeu prêt : demande le nom si besoin, puis compte l'entrée. Ne bloque jamais le jeu. */
 export async function startPlayers() {
   if (!PLAYERS_API) return;

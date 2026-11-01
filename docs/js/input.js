@@ -19,9 +19,10 @@ export function readPad() {
 export class Input {
   constructor(root) {
     this.look = { x: 0, y: 0, zoom: 0, on: false };   // vue : sticks de la manette
-    this.s = { steer: 0, throttle: 0, brake: 0, reverse: 0, hand: false }; this.keys = new Set(); this.edge = { cam: false, horn: false, lights: false, reset: false, pause: false, time: false, map: false };
-    this.touch = { steer: 0, gas: 0, brake: 0, hand: false, active: false }; this.tilt = { on: false, v: 0, raw: 0, zero: null, got: false }; this.isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window || new URLSearchParams(location.search).has('touch'); this.ptr = new Map();
-    addEventListener('keydown', e => { if (e.repeat) return; this.keys.add(e.code); const m = { KeyC: 'cam', KeyH: 'horn', KeyL: 'lights', KeyR: 'reset', KeyT: 'time', KeyM: 'map' }[e.code]; if (m) this.edge[m] = true; if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault(); });
+    this.s = { steer: 0, throttle: 0, brake: 0, reverse: 0, hand: false }; this.keys = new Set(); this.edge = { cam: false, horn: false, lights: false, reset: false, pause: false, time: false, map: false, sigL: false, sigR: false };
+    this.touch = { steer: 0, gas: 0, brake: 0, hand: false, active: false, left: 0, right: 0 }; this.ctl = 'wheel';   // ctl : 'wheel' (volant glissé) ou 'buttons' (flèches ◀ ▶)
+     this.tilt = { on: false, v: 0, raw: 0, zero: null, got: false }; this.isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window || new URLSearchParams(location.search).has('touch'); this.ptr = new Map();
+    addEventListener('keydown', e => { if (e.repeat) return; this.keys.add(e.code); const m = { KeyC: 'cam', KeyH: 'horn', KeyL: 'lights', KeyR: 'reset', KeyT: 'time', KeyM: 'map', KeyJ: 'sigL', KeyK: 'sigR' }[e.code]; if (m) this.edge[m] = true; if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault(); });
     addEventListener('keyup', e => this.keys.delete(e.code)); addEventListener('blur', () => this.keys.clear());
     this._bindTouch(root); this.steerSmooth = 0;
   }
@@ -34,9 +35,9 @@ export class Input {
     const up = (e) => { if (this.ptr.delete(e.pointerId)) { T.steer = 0; wheel.style.transform = 'rotate(0deg)'; } };
     zone.addEventListener('pointerup', up); zone.addEventListener('pointercancel', up); zone.addEventListener('lostpointercapture', up);
     const pedal = (el, key) => { el.addEventListener('pointerdown', e => { T[key] = 1; el.classList.add('on'); el.setPointerCapture(e.pointerId); e.preventDefault(); }); const off = () => { T[key] = 0; el.classList.remove('on'); }; el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off); el.addEventListener('lostpointercapture', off); };
-    pedal(gas, 'gas'); pedal(brk, 'brake'); pedal($('btnHand'), 'hand');
+    pedal(gas, 'gas'); pedal(brk, 'brake'); pedal($('btnHand'), 'hand'); if ($('btnLeft')) { pedal($('btnLeft'), 'left'); pedal($('btnRight'), 'right'); }
     const tap = (id, name) => { const el = $(id); if (el) el.addEventListener('pointerdown', e => { this.edge[name] = true; e.preventDefault(); }); };
-    tap('btnCam', 'cam'); tap('btnHorn', 'horn'); tap('btnLights', 'lights'); tap('btnReset', 'reset'); tap('btnTime', 'time');
+    tap('btnCam', 'cam'); tap('btnHorn', 'horn'); tap('btnSigL', 'sigL'); tap('btnSigR', 'sigR'); tap('btnLights', 'lights'); tap('btnReset', 'reset'); tap('btnTime', 'time');
     document.addEventListener('gesturestart', e => e.preventDefault()); document.addEventListener('contextmenu', e => e.preventDefault());
     root.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
   }
@@ -55,6 +56,8 @@ export class Input {
       this.tilt.on = true; this.tilt.got = false; this.tilt.zero = null; this.tilt.v = 0; return true;
     } catch (e) { return false; }
   }
+  /** commandes tactiles : 'wheel' = volant glissé à gauche ; 'buttons' = deux boutons ◀ ▶ (les deux modes ne se mélangent jamais) */
+  setCtl(mode) { this.ctl = mode === 'buttons' ? 'buttons' : 'wheel'; const T = this.touch; T.left = T.right = 0; T.steer = 0; T.active = false; this.ptr.clear(); }
   disableTilt() { this.tilt.on = false; this.tilt.v = 0; }
   calibrateTilt() { this.tilt.zero = null; }
   _tiltSteer(dt) {
@@ -68,14 +71,15 @@ export class Input {
     if (k.has('ArrowLeft') || k.has('KeyA') || k.has('KeyQ')) steer -= 1; if (k.has('ArrowRight') || k.has('KeyD')) steer += 1;
     if (k.has('ArrowUp') || k.has('KeyW') || k.has('KeyZ')) th = 1; if (k.has('ArrowDown') || k.has('KeyS')) br = 1; if (k.has('Space')) hand = true;
     const gp = readPad();
-    this.look.x = this.look.y = 0; this.look.zoom = 0; this.look.on = false;
+    this.look.x = this.look.y = 0; this.look.zoom = 0; this.look.on = false; this.look.mx = this.look.my = 0;
     if (gp) { const B = i => !!(gp.buttons[i] && gp.buttons[i].pressed);   // manette standard : 12 haut, 13 bas, 14 gauche, 15 droite
-      if (B(14)) steer -= 1; if (B(15)) steer += 1; if (B(12)) th = 1; if (B(13)) br = 1; this.look.zoom = (B(12) ? 1 : 0) - (B(13) ? 1 : 0);
-      const dz = v => Math.abs(v) < 0.16 ? 0 : Math.sign(v)*(Math.abs(v) - 0.16)/0.84, lx = dz(gp.axes[0] || 0) + dz(gp.axes[2] || 0), ly = dz(gp.axes[1] || 0) + dz(gp.axes[3] || 0);   // les deux sticks tournent la vue
-      this.look.x = Math.max(-1, Math.min(1, lx)); this.look.y = Math.max(-1, Math.min(1, ly)); this.look.on = !!(this.look.x || this.look.y);
+      if (B(14)) steer -= 1; if (B(15)) steer += 1; steer += (v => Math.abs(v) < 0.12 ? 0 : Math.sign(v)*(Math.abs(v) - 0.12)/0.88)(gp.axes[0] || 0); /* stick gauche = volant (progressif) */ if (B(12)) th = 1; if (B(13)) br = 1; this.look.zoom = (B(12) ? 1 : 0) - (B(13) ? 1 : 0);
+      const dz = v => Math.abs(v) < 0.16 ? 0 : Math.sign(v)*(Math.abs(v) - 0.16)/0.84, lx = dz(gp.axes[2] || 0), ly = dz(gp.axes[3] || 0);   // stick droit : tourner la vue ; stick gauche : volant (voir plus bas)
+      this.look.x = Math.max(-1, Math.min(1, lx)); this.look.y = Math.max(-1, Math.min(1, ly)); this.look.on = !!(this.look.x || this.look.y); this.look.mx = dz(gp.axes[0] || 0); this.look.my = dz(gp.axes[1] || 0);   // stick gauche : balade (utilisé en exploration)
       const rt = gp.buttons[7] ? gp.buttons[7].value : 0, lt = gp.buttons[6] ? gp.buttons[6].value : 0; th = Math.max(th, rt); br = Math.max(br, lt); if (gp.buttons[0] && gp.buttons[0].pressed) hand = true;
+      { const l1 = !!(gp.buttons[4] && gp.buttons[4].pressed), r1 = !!(gp.buttons[5] && gp.buttons[5].pressed); if (l1 && !this._g4) this.edge.sigL = true; if (r1 && !this._g5) this.edge.sigR = true; this._g4 = l1; this._g5 = r1; }   // L1 / R1 : clignotants
       if (gp.buttons[3] && gp.buttons[3].pressed && !this._g3) this.edge.cam = true; this._g3 = gp.buttons[3] && gp.buttons[3].pressed; if (gp.buttons[2] && gp.buttons[2].pressed && !this._g2) this.edge.horn = true; this._g2 = gp.buttons[2] && gp.buttons[2].pressed; }
-    const T = this.touch; if (T.active) steer += T.steer; th = Math.max(th, T.gas); br = Math.max(br, T.brake); hand = hand || T.hand; if (this.tilt.on) { const tv = this._tiltSteer(dt); steer += tv*1.15; const w = document.getElementById('wheel'); if (w && !T.active) w.style.transform = `rotate(${(tv*120).toFixed(1)}deg)`; }
+    const T = this.touch; if (T.active) steer += T.steer; if (this.ctl === 'buttons') steer += T.right - T.left; th = Math.max(th, T.gas); br = Math.max(br, T.brake); hand = hand || T.hand; if (this.tilt.on) { const tv = this._tiltSteer(dt); steer += tv*1.15; const w = document.getElementById('wheel'); if (w && !T.active) w.style.transform = `rotate(${(tv*120).toFixed(1)}deg)`; }
     // smooth steering so keyboard feels progressive and returns to centre
     const target = Math.max(-1, Math.min(1, steer)), rate = (Math.abs(target) > Math.abs(this.steerSmooth) || Math.sign(target) !== Math.sign(this.steerSmooth) ? 4.2 : 6.0)*dt; this.steerSmooth += Math.max(-rate, Math.min(rate, target - this.steerSmooth)); if (T.active || gp) this.steerSmooth = target;
     s.steer = this.steerSmooth; s.throttle = th; s.brake = br; s.hand = hand; s.reverse = 0; return s;

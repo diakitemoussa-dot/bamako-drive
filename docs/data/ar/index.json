@@ -1,0 +1,182 @@
+[
+ {
+  "name": "Monument de la Paix",
+  "file": "lm_monument_paix.glb",
+  "size": [
+   30.3,
+   33.5,
+   30.3
+  ]
+ },
+ {
+  "name": "Grand Marché",
+  "file": "lm_grand_marche.glb",
+  "size": [
+   166.8,
+   30.3,
+   169.4
+  ]
+ },
+ {
+  "name": "Monument de l'Indépendance",
+  "file": "monument_independance.glb",
+  "size": [
+   10.9,
+   17.4,
+   11.1
+  ]
+ },
+ {
+  "name": "Ecobank (Ave de la Nation)",
+  "file": "ecobank_siege.glb",
+  "size": [
+   53,
+   55.3,
+   44.1
+  ]
+ },
+ {
+  "name": "Tour BCEAO",
+  "file": "tour_bceao_reel.glb",
+  "size": [
+   122.9,
+   110.1,
+   122.9
+  ]
+ },
+ {
+  "name": "Cathédrale",
+  "file": "lm_cathedrale.glb",
+  "size": [
+   62,
+   39,
+   43.9
+  ]
+ },
+ {
+  "name": "Grande Mosquée",
+  "file": "lm_grande_mosquee.glb",
+  "size": [
+   107.2,
+   67.5,
+   94.5
+  ]
+ },
+ {
+  "name": "Stade Modibo Keïta",
+  "file": "lm_stade_modibo_keita.glb",
+  "size": [
+   215.4,
+   51.4,
+   212.1
+  ]
+ },
+ {
+  "name": "Palais de la Culture",
+  "file": "lm_palais_culture.glb",
+  "size": [
+   107.9,
+   17.5,
+   76.5
+  ]
+ },
+ {
+  "name": "Azalaï Hôtel",
+  "file": "azalai_hotel.glb",
+  "size": [
+   115.1,
+   27,
+   100.9
+  ]
+ },
+ {
+  "name": "Radisson Collection",
+  "file": "radisson_hotel.glb",
+  "size": [
+   105.8,
+   48.8,
+   75.2
+  ]
+ },
+ {
+  "name": "Cité Administrative",
+  "file": "cite_administrative.glb",
+  "size": [
+   418.4,
+   32.8,
+   536.2
+  ]
+ },
+ {
+  "name": "Hôtel de l'Amitié",
+  "file": "amitie_hotel.glb",
+  "size": [
+   157.9,
+   94.6,
+   139.1
+  ]
+ },
+ {
+  "name": "Hôtel Libya",
+  "file": "libya_hotel.glb",
+  "size": [
+   92.7,
+   44.6,
+   75.9
+  ]
+ },
+ {
+  "name": "Gare de Bamako",
+  "file": "gare_bamako.glb",
+  "size": [
+   136.2,
+   13.6,
+   127.1
+  ]
+ },
+ {
+  "name": "CHU Gabriel Touré",
+  "file": "chu_gabriel_toure.glb",
+  "size": [
+   320.6,
+   20.4,
+   342.6
+  ]
+ },
+ {
+  "name": "Musée National",
+  "file": "musee_national.glb",
+  "size": [
+   117.2,
+   11.2,
+   93.9
+  ]
+ },
+ {
+  "name": "Assemblée Nationale",
+  "file": "assemblee_nationale.glb",
+  "size": [
+   146.9,
+   13.9,
+   189.3
+  ]
+ },
+ {
+  "name": "Mémorial Modibo Keïta",
+  "file": "memorial_keita.glb",
+  "size": [
+   107.5,
+   24.5,
+   124.3
+  ]
+ },
+ {
+  "name": "CICB",
+  "file": "cicb.glb",
+  "size": [
+   181.3,
+   33.5,
+   150
+  ]
+ }
+]

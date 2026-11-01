@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Open+Sans:wght@400;600&family=Rubik:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/game.css">
-<script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/", "fflate": "./vendor/fflate.js" } }</script>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/", "fflate": "./vendor/fflate.js", "model-viewer": "./vendor/model-viewer.min.js" } }</script>
 </head>
 <body>
 <canvas id="gl"></canvas>
@@ -19,7 +19,7 @@
 
 <div id="hud" class="hidden">
   <div id="topleft"><canvas id="minimap" width="360" height="360" title="Appuie pour agrandir la carte"></canvas><div id="mapTap">⤢ carte</div><div id="where"></div></div>
-  <div id="topBtns"><button id="hudPause" aria-label="Pause">❚❚ Pause</button><button id="hudRadio" aria-label="Radio">📻 Radio</button><button id="hudMenu" aria-label="Menu">☰ Menu</button></div>
+  <div id="topBtns"><button id="hudPause" aria-label="Pause">❚❚ Pause</button><button id="hudRadio" aria-label="Radio">📻 Radio</button><button id="hudMenu" aria-label="Menu">☰ Menu</button><button id="hudFeedback" aria-label="Donner mon avis">💬 Avis</button></div>
   <div id="radio" class="hidden"><div id="radioHead"><b>📻 Radio Mali</b><button id="radioClose" aria-label="Fermer">✕</button></div><div id="radioList"></div><div id="radioNow">Radio éteinte</div><div id="radioCtl"><button id="radioNext">⏭ Suivant</button><button id="radioOff">⏹ Éteindre</button></div><label id="radioVol">Volume <input type="range" id="radioVolIn" min="0" max="1" step="0.05" value="0.8"></label><small>Extraits officiels de 30 s (Apple Music) · internet requis</small></div>
   <div id="clock"><div id="clockTime">11:30</div><div id="clockPeriod">Jour</div></div>
   <div id="limit" class="hidden"><span id="limitVal">50</span></div>
@@ -31,8 +31,9 @@
 
 <div id="touch" class="hidden">
   <div id="steerZone"><div id="wheel"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="8"/><circle cx="50" cy="50" r="9" fill="rgba(255,255,255,.55)"/><path d="M50 50 L50 8 M50 50 L12 72 M50 50 L88 72" stroke="rgba(255,255,255,.55)" stroke-width="7" fill="none"/></svg></div><span class="hint">glisse pour tourner</span></div>
+  <div id="steerBtns"><button id="btnLeft" class="pedal steer" aria-label="Tourner à gauche">◀</button><button id="btnRight" class="pedal steer" aria-label="Tourner à droite">▶</button></div>
   <div id="pedals"><button id="btnBrake" class="pedal">FREIN</button><button id="btnGas" class="pedal gas">GAZ</button></div>
-  <div id="sideBtns"><button id="btnHand">frein main</button><button id="btnHorn">klaxon</button><button id="btnCam">caméra</button><button id="btnLights">phares</button><button id="btnTime">heure</button><button id="btnTilt">📱 volant</button><button id="btnReset">remettre</button></div>
+  <div id="sideBtns"><button id="btnHand">frein main</button><button id="btnHorn">klaxon</button><button id="btnCam">caméra</button><button id="btnSigL" class="sigBtn" aria-label="Clignotant gauche">◀</button><button id="btnSigR" class="sigBtn" aria-label="Clignotant droit">▶</button><button id="btnLights">phares</button><button id="btnTime">heure</button><button id="btnCtl" aria-label="Changer de commandes">◀▶ boutons</button><button id="btnTilt">📱 incliner</button><button id="btnReset">remettre</button></div>
 </div>
 
 <div id="bigmap" class="hidden"><canvas id="bigmapCv"></canvas>
@@ -45,8 +46,9 @@
     <button id="play" disabled>Chargement…</button>
     <button id="exploreBtn" disabled>🗺 Exploration de la ville en 3D</button>
     <button id="backGame" class="hidden">↩ Retour à la partie en cours</button>
+    <div id="fbCard"><div class="fbT">⭐ Ton avis compte !</div><div class="fbS">Comment trouves-tu Bamako Drive ? Touche un visage :</div><div class="fbEmo"></div><button id="fbHome">✍ Écrire un commentaire ou signaler un bug</button></div>
     <div id="loadBar"><i id="loadFill"></i></div><div id="loadTxt">Préparation de la ville…</div>
-    <div class="help" id="helpPC"><b>Clavier :</b> ↑/W accélérer · ↓/S freiner/marche arrière · ←→/A D tourner · Espace frein à main · H klaxon · C caméra · L phares · T heure · R remettre sur la route · Échap ou P pause / reprise · <b>Manette :</b> croix directionnelle pour conduire, sticks pour tourner la vue ; dans les menus croix + X pour valider, B retour (appuie d’abord sur un bouton de la manette pour qu’elle soit détectée ; diagnostic : ajoute ?pad=1 à l’adresse) ; Y caméra, X klaxon, A frein à main</div>
+    <div class="help" id="helpPC"><b>Clavier :</b> ↑/W accélérer · ↓/S freiner/marche arrière · ←→/A D tourner · Espace frein à main · H klaxon · J / K clignotant gauche / droit · C caméra · L phares · T heure · R remettre sur la route · Échap ou P pause / reprise · <b>Manette :</b> croix directionnelle pour conduire, sticks pour tourner la vue ; dans les menus croix + X pour valider, B retour (appuie d’abord sur un bouton de la manette pour qu’elle soit détectée ; diagnostic : ajoute ?pad=1 à l’adresse) ; Y caméra, X klaxon, A frein à main, L1 / R1 clignotants</div>
     <div class="help hidden" id="helpTouch"><b>Tactile :</b> glisse à gauche pour tourner · GAZ / FREIN à droite · boutons pour klaxon, caméra, phares. Tourne ton téléphone en mode paysage.</div>
   </div></div>
 
@@ -69,18 +71,30 @@
     <div class="steps dark"><span class="done"><b>✓</b>Véhicule</span><span class="done"><b>✓</b>Moment</span><span class="on"><b>3</b>Départ</span></div>
     <div id="recap"></div>
     <div class="row"><label>Départ</label><div id="placeList" class="chips"></div></div>
+    <div class="row hidden" id="ctlRow"><label>Commandes</label><div id="ctlList" class="chips"><button data-c="wheel" class="on">🛞 Volant</button><button data-c="buttons">◀ ▶ Boutons</button></div></div>
     <div class="row"><label>Trafic</label><div id="trafficList" class="chips"><button data-v="0.35">Calme</button><button data-v="0.7" class="on">Normal</button><button data-v="1">Dense</button></div></div>
     <div class="row"><label>Qualité</label><div id="qualList" class="chips"><button data-q="auto" class="on">Auto</button><button data-q="low">Économe</button><button data-q="med">Moyenne</button><button data-q="high">Élevée</button></div></div>
-    <label class="check hidden" id="tiltRow"><input type="checkbox" id="tilt"> Utiliser mon téléphone comme volant (tourne-le comme un volant, en paysage)</label>
+    <div class="row"><label>Clients</label><div id="langList" class="chips"><button data-l="fr" class="on">Français</button><button data-l="bm">Bamanankan</button></div></div>
+    <label class="check hidden" id="tiltRow"><input type="checkbox" id="tilt"> Incliner mon téléphone pour tourner (comme un volant, en paysage)</label>
     <div class="ctaRow"><button class="back" data-go="moment">‹ Retour</button><button id="go" class="cta">▶ C'EST PARTI</button></div>
   </div></div>
 </div>
-<div id="pause" class="hidden"><div class="panel"><h2>Pause</h2><button id="resume">Reprendre</button><button id="toMenu">Menu : changer de véhicule / lieu</button><button id="fsBtn">Plein écran</button></div></div>
+<div id="pause" class="hidden"><div class="panel"><h2>Pause</h2><button id="resume">Reprendre</button><button id="toMenu">Menu : changer de véhicule / lieu</button><button id="fsBtn">Plein écran</button><button id="fbPause">💬 Donner mon avis</button></div></div>
 <div id="explore" class="hidden">
   <div id="exPad"></div><div id="exLabels"></div>
   <div id="exTop"><div id="exTitle">Bamako vue du ciel</div><button id="exTime" aria-label="Moment de la journée">☀ Jour</button><button id="exQuit" aria-label="Quitter l'exploration">✕ Quitter</button></div>
   <div id="exTools"><button id="exIn" aria-label="Zoom +">+</button><button id="exOut" aria-label="Zoom -">−</button><button id="exL" aria-label="Tourner à gauche">⟲</button><button id="exR" aria-label="Tourner à droite">⟳</button><button id="exUp" aria-label="Plus incliné">⤒</button><button id="exDown" aria-label="Vue du dessus">⤓</button></div>
-  <div id="exCard" class="hidden"><b id="exName"></b><button id="exDrive">🚗 Conduire ici</button></div>
+  <div id="exCard" class="hidden"><b id="exName"></b><button id="exDrive">🚗 Conduire ici</button><button id="exAR" class="hidden">📱 Voir en AR</button></div>
+  <div id="arSheet" class="hidden" role="dialog" aria-modal="true" aria-labelledby="arName">
+    <div id="arBox">
+      <button id="arClose" aria-label="Fermer">✕</button>
+      <div id="arKicker">Réalité augmentée</div><h2 id="arName"></h2>
+      <div id="arStage"></div>
+      <p id="arMsg"></p>
+      <button id="arGo" class="cta" disabled>📱 Voir en AR dans ma pièce</button>
+      <p id="arHint">Pointe ton téléphone vers une table ou le sol, puis touche l'écran pour poser le lieu. Pince pour l'agrandir, tourne-le avec deux doigts.</p>
+    </div>
+  </div>
   <div id="exHint">1 doigt : tourner autour de la ville · 2 doigts : zoomer (pincer) et déplacer · molette : zoom · touche une pancarte pour y aller</div>
 </div>
 <div id="rotate" class="hidden">↻ Tourne ton téléphone en mode paysage</div>

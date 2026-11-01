@@ -3,7 +3,19 @@ import * as THREE from 'three';
 import { gunzipSync } from 'fflate';
 
 const HASH = 'float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }';
-export const shared = { uWin: { value: 1 }, uNight: { value: 0 }, uDusk: { value: 0 }, uSky: { value: new THREE.Color(0.6, 0.7, 0.85) }, uTime: { value: 0 } };
+// eau : bruit de valeur + somme de vagues directionnelles (gradient analytique) -> normale perturbee, reflet du ciel (Fresnel), eclat du soleil, turbidite du Niger
+const WATER = `
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f); return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y); }
+vec2 wg(vec2 p, vec2 d, float k, float sp, float a, float t){ return d * (k * a * cos(dot(p, d) * k + t * sp)); }
+vec2 waterGrad(vec2 p, float t, float lod){
+  vec2 g = wg(p, normalize(vec2(0.92, 0.38)), 0.11, 0.55, 0.9, t) + wg(p, normalize(vec2(-0.35, 0.94)), 0.19, 0.7, 0.7, t);
+  g += (wg(p, normalize(vec2(0.55, -0.83)), 0.47, 1.1, 0.5, t) + wg(p, normalize(vec2(-0.8, -0.6)), 0.83, 1.5, 0.34, t)) * lod;
+  g += (wg(p, normalize(vec2(0.2, 0.98)), 1.7, 2.1, 0.2, t) + wg(p, normalize(vec2(0.97, -0.25)), 2.9, 2.6, 0.12, t)) * lod * lod;
+  vec2 q = p * 0.9 + vec2(t * 0.22, -t * 0.17); float n0 = vn(q), nx = vn(q + vec2(0.35, 0.0)), nz = vn(q + vec2(0.0, 0.35));
+  g += vec2(nx - n0, nz - n0) * 1.6 * lod;
+  return g;
+}`;
+export const shared = { uWin: { value: 1 }, uNight: { value: 0 }, uDusk: { value: 0 }, uSky: { value: new THREE.Color(0.6, 0.7, 0.85) }, uTime: { value: 0 }, uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Color(1, 1, 1) } };
 
 export function makeCityMaterial() {
   const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
@@ -13,7 +25,7 @@ export function makeCityMaterial() {
       vWPos = (modelMatrix * vec4(position, 1.0)).xyz; vFN = aN;
       { vec3 tn = normalize(vec3(-aN.z, 0.0, aN.x) + vec3(1e-5, 0.0, 0.0)); vec3 q = vWPos; vUVW = vec3(dot(q, tn) / 3.3, (q.y + 0.35) / 3.1, dot(vec3(floor(q.x / 9.0), 0.0, floor(q.z / 9.0)), vec3(0.37, 0.0, 0.61))); }`);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos; varying vec3 vFN; varying vec3 vUVW; uniform float uNight; uniform float uDusk; uniform float uWin; uniform vec3 uSky; uniform float uTime;\n' + HASH)
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos; varying vec3 vFN; varying vec3 vUVW; uniform float uNight; uniform float uDusk; uniform float uWin; uniform vec3 uSky; uniform float uTime; uniform vec3 uSunDir; uniform vec3 uSunCol;\n' + HASH + WATER)
       .replace('#include <color_fragment>', `#include <color_fragment>
         vec3 emitC = vec3(0.0);
         diffuseColor.rgb = pow(diffuseColor.rgb, vec3(2.2));
@@ -30,11 +42,22 @@ export function makeCityMaterial() {
             emitC = vec3(1.0, 0.78, 0.46) * step(0.5, hh) * (0.55 + 0.9 * h21(cell * 3.1)) * uNight * 1.5;
           }
         } else if (cls == 3.0) {
-          vec3 V = normalize(cameraPosition - vWPos); float fr = pow(1.0 - clamp(V.y, 0.0, 1.0), 2.5);
-          float rip = sin(vWPos.x * 0.31 + uTime * 0.6) * sin(vWPos.z * 0.27 - uTime * 0.45);
-          diffuseColor.rgb = mix(diffuseColor.rgb * (0.9 + 0.2 * rip), uSky * 0.85, fr * 0.7);
+          vec3 Vw = cameraPosition - vWPos; float dist = length(Vw); vec3 V = Vw / max(dist, 1e-3);
+          float lod = exp(-dist * 0.0045);                                    // les petites vagues disparaissent avec la distance (pas de scintillement)
+          vec2 gr = waterGrad(vWPos.xz, uTime, lod);
+          vec3 N = normalize(vec3(-gr.x * 0.55, 1.0, -gr.y * 0.55));
+          float ndv = clamp(dot(N, V), 0.0, 1.0);
+          float fr = 0.03 + 0.97 * pow(1.0 - ndv, 5.0);
+          vec3 R = reflect(-V, N); R.y = abs(R.y);
+          vec3 skyC = mix(uSky, uSky * vec3(0.55, 0.72, 1.05), smoothstep(0.0, 0.9, R.y));
+          float turb = 0.82 + 0.36 * vn(vWPos.xz * 0.012 + vec2(uTime * 0.01, 0.0));      // bancs de sediments : zones plus claires / plus sombres
+          float crest = smoothstep(0.62, 1.0, vn(vWPos.xz * 0.55 + gr * 2.0 + uTime * 0.12)) * lod;
+          vec3 body = diffuseColor.rgb * turb * (1.0 + 0.55 * crest);
+          float sp = pow(max(dot(R, uSunDir), 0.0), 260.0) * 6.0 + pow(max(dot(R, uSunDir), 0.0), 24.0) * 0.35;
+          diffuseColor.rgb = body * (1.0 - fr * 0.9);
+          emitC = skyC * fr * 0.8 + uSunCol * sp * (0.25 + 0.75 * fr);
         } else if (cls == 4.0) {
-          emitC = vec3(1.0, 0.9, 0.7) * uNight * 1.5; diffuseColor.rgb += emitC * 0.0;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.85, 0.42, 0.12), 0.35 + 0.55 * uNight); emitC = vec3(1.0, 0.5, 0.13) * uNight * 1.6;   // ampoule orange (sodium)
         } else if (cls == 7.0) {
           diffuseColor.rgb = vec3(0.6, 0.01, 0.005); emitC = vec3(1.0, 0.06, 0.03) * uDusk * (0.8 + 0.5 * sin(uTime * 2.4)) * 3.2;
         } else if (cls == 5.0) {
