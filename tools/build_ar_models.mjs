@@ -4,6 +4,7 @@
 // Usage : node tools/build_ar_models.mjs      (aucune dépendance, pas besoin de Blender)
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -17,12 +18,68 @@ const PLACES = {        // nom affiché dans le jeu -> nœud du GLB (sans le suf
   'Mémorial Modibo Keïta': 'Memorial_Keita', 'CICB': ['CICB', 'CICB_Hall', 'CICB_Fontaine'],
 };
 
+// Certains monuments n'ont dans landmarks.glb que leurs faces texturées (toits) : leurs murs sont dans les tuiles de la ville
+// (classe 1 = « X_Mur », stockée dans l'alpha des couleurs). On les récupère autour de l'emprise du monument.
+const WALLS_FROM_TILES = { 'Cité Administrative': { cls: 1 }, 'CHU Gabriel Touré': { cls: 1 } };
+const TILE = 250, TX0 = -2400, TZ0 = -2800, CELL = 2, MARGIN = 3, COLOR_TOL = 40;   // grille des tuiles (data/manifest.json) ; masque d'emprise à 2 m, dilaté de 3 m
+
 const buf = fs.readFileSync(path.join(ROOT, 'data/landmarks.glb'));
 if (buf.readUInt32LE(0) !== 0x46546c67) throw new Error('landmarks.glb : pas un GLB');
 const jl = buf.readUInt32LE(12), json = JSON.parse(buf.subarray(20, 20 + jl).toString('utf8'));
 const bin = buf.subarray(28 + jl, 28 + jl + buf.readUInt32LE(20 + jl));
 
-function extract(nodes) {
+const srgb2lin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+/** triangles (sommets en coordonnées monde) d'un nœud du GLB — nœud sans transformation uniquement */
+function nodeTriangles(node) {
+  if (node.translation || node.rotation || node.scale) throw new Error(node.name + ' : murs depuis les tuiles non gérés avec transformation');
+  const tris = [], CT = { 5126: 4, 5125: 4, 5123: 2 };
+  for (const p of json.meshes[node.mesh].primitives) {
+    const at = (ai, i, comp) => { const a = json.accessors[ai], v = json.bufferViews[a.bufferView], nc = { SCALAR: 1, VEC3: 3 }[a.type], sz = CT[a.componentType], o = (v.byteOffset || 0) + (a.byteOffset || 0) + i * (v.byteStride || nc * sz) + comp * sz;
+      return a.componentType === 5126 ? bin.readFloatLE(o) : a.componentType === 5125 ? bin.readUInt32LE(o) : bin.readUInt16LE(o); };
+    const P = i => [at(p.attributes.POSITION, i, 0), at(p.attributes.POSITION, i, 1), at(p.attributes.POSITION, i, 2)];
+    const n = p.indices !== undefined ? json.accessors[p.indices].count : json.accessors[p.attributes.POSITION].count;
+    for (let t = 0; t + 2 < n; t += 3) tris.push([0, 1, 2].map(k => P(p.indices !== undefined ? at(p.indices, t + k, 0) : t + k)));
+  }
+  return tris;
+}
+const tileCache = new Map();
+function tile(ix, iz) {
+  const k = ix + '_' + iz; if (tileCache.has(k)) return tileCache.get(k);
+  const f = path.join(ROOT, `data/tiles/t_${ix}_${iz}.bin.gz`); let t = null;
+  if (fs.existsSync(f)) { const b = zlib.gunzipSync(fs.readFileSync(f)), hl = b.readUInt32LE(4); t = { head: JSON.parse(b.subarray(8, 8 + hl).toString('utf8').replace(/\0+$/, '')), b, base: 8 + hl }; }
+  tileCache.set(k, t); return t;
+}
+/** triangles de classe `cls` des tuiles dont le centre tombe dans le masque d'emprise des triangles `tris` */
+function wallsFromTiles(tris, cls) {
+  const mask = new Set(), m = Math.ceil(MARGIN / CELL), cell = v => Math.floor(v / CELL);
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+  for (const T of tris) {
+    const xs = T.map(v => v[0]), zs = T.map(v => v[2]);
+    for (let i = cell(Math.min(...xs)) - m; i <= cell(Math.max(...xs)) + m; i++) for (let j = cell(Math.min(...zs)) - m; j <= cell(Math.max(...zs)) + m; j++) mask.add(i + ',' + j);
+    x0 = Math.min(x0, ...xs); x1 = Math.max(x1, ...xs); z0 = Math.min(z0, ...zs); z1 = Math.max(z1, ...zs);
+  }
+  const out = [];
+  for (let ix = Math.floor((x0 - MARGIN - TX0) / TILE); ix <= Math.floor((x1 + MARGIN - TX0) / TILE); ix++) for (let iz = Math.floor((z0 - MARGIN - TZ0) / TILE); iz <= Math.floor((z1 + MARGIN - TZ0) / TILE); iz++) {
+    const t = tile(ix, iz); if (!t || !t.head.n) continue; const { head, b, base } = t, off = head.off, qs = head.qs;
+    for (let v = 0; v + 2 < head.n; v += 3) {
+      if (b[base + off.col + v * 4 + 3] !== cls) continue;
+      const P = [0, 1, 2].map(k => [0, 1, 2].map(a => b.readInt16LE(base + off.pos + ((v + k) * 3 + a) * 2) * qs)); for (const q of P) { q[0] += head.ox; q[2] += head.oz; }
+      if (!mask.has(cell((P[0][0] + P[1][0] + P[2][0]) / 3) + ',' + cell((P[0][2] + P[1][2] + P[2][2]) / 3))) continue;
+      out.push({ P, C: [0, 1, 2].map(k => [0, 1, 2].map(a => b[base + off.col + (v + k) * 4 + a])) });
+    }
+  }
+  // garde les murs de la teinte dominante du monument (écarte les maisons voisines de la même classe)
+  if (out.length) {
+    const avg = w => [0, 1, 2].map(a => (w.C[0][a] + w.C[1][a] + w.C[2][a]) / 3), med = a => { const v = out.map(w => avg(w)[a]).sort((x, y) => x - y); return v[v.length >> 1]; };
+    const M = [med(0), med(1), med(2)];
+    const ny = w => { const [A, B, C] = w.P, u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], v = [C[0] - A[0], C[1] - A[1], C[2] - A[2]], N = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]; return Math.abs(N[1]) / (Math.hypot(...N) || 1); };
+    // murs (verticaux) ou toits (horizontaux) seulement : les triangles inclinés sont des éclats de maisons voisines
+    return out.filter(w => avg(w).every((c, a) => Math.abs(c - M[a]) <= COLOR_TOL) && (ny(w) < 0.25 || ny(w) > 0.9));
+  }
+  return out;
+}
+
+function extract(nodes, label) {
   const out = { asset: { version: '2.0', generator: 'bamako-drive build_ar_models' }, scene: 0, scenes: [{ nodes: [0] }], nodes: [], meshes: [], materials: [], textures: [], images: [], samplers: [], accessors: [], bufferViews: [] };
   const chunks = []; let off = 0;
   const maps = { acc: new Map(), bv: new Map(), mat: new Map(), tex: new Map(), img: new Map(), smp: new Map() };
@@ -71,11 +128,31 @@ function extract(nodes) {
     const k = out.meshes.push(mesh) - 1;
     const inner = { name: node.name.replace(/_bk$/, ''), mesh: k }; if (node.translation) inner.translation = node.translation; if (node.rotation) inner.rotation = node.rotation; if (node.scale) inner.scale = node.scale; inners.push(inner);
   }
+  let nWalls = 0;
+  if (WALLS_FROM_TILES[label]) {
+    const walls = wallsFromTiles(nodes.flatMap(nodeTriangles), WALLS_FROM_TILES[label].cls); nWalls = walls.length;
+    if (walls.length) {
+      const n = walls.length * 3, pos = Buffer.alloc(n * 12), nor = Buffer.alloc(n * 12), col = Buffer.alloc(n * 4); let k = 0;
+      const mnP = [1e9, 1e9, 1e9], mxP = [-1e9, -1e9, -1e9];
+      for (const w of walls) {
+        const [A, B, C] = w.P, u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], v = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
+        let N = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]; const L = Math.hypot(...N) || 1; N = N.map(x => x / L);
+        for (let i = 0; i < 3; i++, k++) {
+          for (let a = 0; a < 3; a++) { pos.writeFloatLE(w.P[i][a], k * 12 + a * 4); nor.writeFloatLE(N[a], k * 12 + a * 4); mn[a] = Math.min(mn[a], w.P[i][a]); mx[a] = Math.max(mx[a], w.P[i][a]); mnP[a] = Math.min(mnP[a], w.P[i][a]); mxP[a] = Math.max(mxP[a], w.P[i][a]); }
+          for (let a = 0; a < 3; a++) col[k * 4 + a] = Math.round(srgb2lin(w.C[i][a]) * 255); col[k * 4 + 3] = 255;
+        }
+      }
+      const addView = data => { const pad = (4 - off % 4) % 4; if (pad) { chunks.push(Buffer.alloc(pad)); off += pad; } out.bufferViews.push({ buffer: 0, byteOffset: off, byteLength: data.length, target: 34962 }); chunks.push(data); off += data.length; return out.bufferViews.length - 1; };
+      const addAcc = (view, type, ct, more) => { out.accessors.push({ bufferView: view, componentType: ct, count: n, type, ...more }); return out.accessors.length - 1; };
+      out.materials.push({ name: 'Murs', pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.92 }, doubleSided: true });
+      out.meshes[0].primitives.push({ attributes: { POSITION: addAcc(addView(pos), 'VEC3', 5126, { min: mnP, max: mxP }), NORMAL: addAcc(addView(nor), 'VEC3', 5126), COLOR_0: addAcc(addView(col), 'VEC4', 5121, { normalized: true }) }, material: out.materials.length - 1, mode: 4 });
+    }
+  }
   const ext = [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]], s = AR_SIZE / Math.max(...ext), c = [(mn[0] + mx[0]) / 2, mn[1], (mn[2] + mx[2]) / 2];
   out.nodes.push({ name: 'AR_' + inners[0].name, children: inners.map((_, i) => i + 1), scale: [s, s, s], translation: [-s * c[0], -s * c[1], -s * c[2]] }, ...inners);
   if (!out.samplers.length) delete out.samplers;
   out.buffers = [{ byteLength: off + (4 - off % 4) % 4 }];
-  return { out, data: Buffer.concat([...chunks, Buffer.alloc((4 - off % 4) % 4)]), ext };
+  return { out, data: Buffer.concat([...chunks, Buffer.alloc((4 - off % 4) % 4)]), ext, nWalls };
 }
 function glb(out, data) {
   let j = Buffer.from(JSON.stringify(out), 'utf8'); j = Buffer.concat([j, Buffer.alloc((4 - j.length % 4) % 4, 0x20)]);
@@ -88,10 +165,10 @@ const dir = path.join(ROOT, 'data/ar'); fs.rmSync(dir, { recursive: true, force:
 const byName = new Map(json.nodes.map(n => [n.name.replace(/_bk$/, ''), n])), index = []; let total = 0;
 for (const [label, nodeName] of Object.entries(PLACES)) {
   const names = [].concat(nodeName), nodes = names.map(n => { const x = byName.get(n); if (!x) throw new Error('nœud introuvable : ' + n); return x; });
-  const { out, data, ext } = extract(nodes), file = names[0].toLowerCase() + '.glb', g = glb(out, data);
+  const { out, data, ext, nWalls } = extract(nodes, label), file = names[0].toLowerCase() + '.glb', g = glb(out, data);
   fs.writeFileSync(path.join(dir, file), g); total += g.length;
   index.push({ name: label, file, size: [+ext[0].toFixed(1), +ext[1].toFixed(1), +ext[2].toFixed(1)] });
-  console.log(label.padEnd(28), file.padEnd(32), (g.length / 1e6).toFixed(2) + ' Mo', 'réel ' + ext.map(v => v.toFixed(0)).join('×') + ' m');
+  console.log(label.padEnd(28), file.padEnd(32), (g.length / 1e6).toFixed(2) + ' Mo', 'réel ' + ext.map(v => v.toFixed(0)).join('×') + ' m', nWalls ? '+ ' + nWalls + ' triangles de murs' : '');
 }
 fs.writeFileSync(path.join(dir, 'index.json'), JSON.stringify(index, null, 1));
 console.log(index.length + ' modèles AR,', (total / 1e6).toFixed(1) + ' Mo au total');
