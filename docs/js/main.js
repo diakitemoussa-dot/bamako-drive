@@ -201,6 +201,20 @@ async function begin() {
   if (new URLSearchParams(location.search).has('debug')) window.__bd = { input, missions, player, state, graph, world, traffic, camera, scene };
   $('menu').classList.add('hidden'); $('backGame').classList.add('hidden'); $('hud').classList.remove('hidden'); if (input.isTouch) $('touch').classList.remove('hidden'); state.running = true; state.paused = false; checkOrientation(); input.calibrateTilt(); sound.setVehicle(sel.car); sound.start(); toast('Bonne route !', 'good', 2.5);
 }
+/** téléphone : écran dégagé — les boutons secondaires sont rangés derrière « ⋯ » ; seuls le klaxon et le frein à main restent à l'écran (les éléments sont déplacés, leurs actions sont inchangées) */
+function setupTouchHud() {
+  const top = $('topBtns'), tray = document.createElement('div'); tray.id = 'moreTray'; tray.className = 'hidden'; document.body.appendChild(tray);
+  const more = document.createElement('button'); more.id = 'hudMore'; more.setAttribute('aria-label', 'Plus de commandes'); more.textContent = '⋯'; top.appendChild(more);
+  const quick = document.createElement('div'); quick.id = 'quickBtns'; $('touch').appendChild(quick);
+  for (const [id, icon, label] of [['btnHorn', '📯', 'Klaxon'], ['btnHand', '✋', 'Frein à main']]) { const b = $(id); if (!b) continue; b.textContent = icon; b.setAttribute('aria-label', label); b.title = label; quick.appendChild(b); }
+  for (const id of ['btnCam', 'btnSigL', 'btnSigR', 'btnLights', 'btnTime', 'btnReset', 'btnCtl', 'btnTilt', 'hudRadio', 'hudMenu', 'hudFeedback']) { const b = $(id); if (b) tray.appendChild(b); }
+  { const l = $('btnSigL'), r = $('btnSigR'); if (l) l.textContent = '◀ clign.'; if (r) r.textContent = 'clign. ▶'; }   // le tiroir a la place d'un vrai libellé
+  document.body.classList.add('touchhud');
+  const close = () => { tray.classList.add('hidden'); more.classList.remove('on'); };
+  more.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (tray.classList.contains('hidden')) { tray.classList.remove('hidden'); more.classList.add('on'); } else close(); });
+  tray.addEventListener('pointerup', () => setTimeout(close, 250));   // un peu de délai : le clic du bouton touché doit d'abord aboutir
+  document.addEventListener('pointerdown', e => { if (!tray.classList.contains('hidden') && !tray.contains(e.target) && e.target !== more) close(); }, true);
+}
 /** commandes tactiles : 'wheel' (volant glissé) ou 'buttons' (◀ ▶). quiet : sans message. Choix mémorisé (bd_ctl). */
 function setCtl(mode, quiet) {
   mode = mode === 'buttons' ? 'buttons' : 'wheel'; input.setCtl(mode); document.body.classList.toggle('ctl-buttons', mode === 'buttons');
@@ -354,7 +368,7 @@ function buildMenu() {
   $('resume').onclick = () => { pause(false); input.calibrateTilt(); }; $('toMenu').onclick = toMenu; $('backGame').onclick = backToGame; $('hudPause').onclick = () => pause(!state.paused); $('hudMenu').onclick = () => { pause(true); };
   setupRadio(); $('exploreBtn').onclick = startExplore; setupExplore();
   $('fsBtn').onclick = () => { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el); };
-  if (input.isTouch) { $('helpPC').classList.add('hidden'); $('helpTouch').classList.remove('hidden'); if (typeof DeviceOrientationEvent !== 'undefined') $('tiltRow').classList.remove('hidden'); $('tilt').onchange = e => setTilt(e.target.checked); $('btnTilt').addEventListener('pointerdown', e => { e.preventDefault(); setTilt(!input.tilt.on); });
+  if (input.isTouch) { setupTouchHud(); $('helpPC').classList.add('hidden'); $('helpTouch').classList.remove('hidden'); if (typeof DeviceOrientationEvent !== 'undefined') $('tiltRow').classList.remove('hidden'); $('tilt').onchange = e => setTilt(e.target.checked); $('btnTilt').addEventListener('pointerdown', e => { e.preventDefault(); setTilt(!input.tilt.on); });
     $('ctlRow').classList.remove('hidden'); document.querySelectorAll('#ctlList button').forEach(b => { b.onclick = () => setCtl(b.dataset.c); }); $('btnCtl').addEventListener('pointerdown', e => { e.preventDefault(); setCtl(input.ctl === 'buttons' ? 'wheel' : 'buttons'); });
     { let m = 'wheel'; try { m = localStorage.getItem('bd_ctl') === 'buttons' ? 'buttons' : 'wheel'; } catch (e) {} setCtl(m, true); }
   } else { $('btnTilt').classList.add('hidden'); $('btnCtl').classList.add('hidden'); }
