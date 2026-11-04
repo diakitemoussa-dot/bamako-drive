@@ -1,0 +1,6 @@
+﻿id,personnage,locuteur,texte_bambara,traduction_francais
+client_001,Client (taxi),Bourama,"I ni sɔgɔma. Ka taa Badalabugu, a ye joli ye?","Bonjour. Pour aller à Badalabougou, c'est combien ?"
+client_002,Client (taxi),Adama,"A ka gɛlɛn kosɛbɛ. A dɔgɔya dɔɔnin, ni i sɔnna.","C'est très cher. Baisse un peu, s'il te plaît."
+policier_001,Policier,Bakary,"I jɔ yan! I ka sɛbɛnw jira ne la.","Arrête-toi ici ! Montre-moi tes papiers."
+passager_001,Passager (sotrama),Ngolo,"Ayiwa! Dɔɔnin dɔɔnin, ne bɛ siran!","Oh là là ! Doucement, j'ai peur !"
+client_003,Client (taxi),Seydou,"An sera. I ni ce kosɛbɛ!","On est arrivés. Merci beaucoup !"

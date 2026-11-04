@@ -21,6 +21,7 @@ import { initFeedback, openFeedback, missionDone, mountMenuCard, sessionEnded } 
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { hasAR, openAR, closeAR, arOpen } from './ar.js';
 import { trText, getLang, setLang } from './missions/bambara.js';
+import { loadVoices, getVolume, setVolume } from './voixbm.js';
 
 const $ = id => document.getElementById(id);
 const PLACES = [
@@ -365,6 +366,7 @@ function buildMenu() {
   { const ll = $('langList'); if (ll) [...ll.children].forEach(b => { b.classList.toggle('on', b.dataset.l === getLang()); b.onclick = () => { setLang(b.dataset.l); [...ll.children].forEach(c => c.classList.toggle('on', c === b)); }; }); }   // langue des clients : français / bambara
   $('play').onclick = () => { goFullscreen(); showView('garage'); };
   $('go').onclick = async () => { goFullscreen(); $('go').disabled = true; $('go').textContent = 'Chargement…'; if (sel.quality !== 'auto' && PROFILES[sel.quality] !== prof) await applyQuality(PROFILES[sel.quality]); await begin(); $('go').textContent = "▶ C'EST PARTI"; $('go').disabled = false; };
+  loadVoices(); { const vv = $('voiceVol'); if (vv) { vv.value = getVolume(); vv.oninput = () => setVolume(vv.value); } }   // voix bambara pré-générées : liste + volume (séparé de la radio)
   $('resume').onclick = () => { pause(false); input.calibrateTilt(); }; $('toMenu').onclick = toMenu; $('backGame').onclick = backToGame; $('hudPause').onclick = () => pause(!state.paused); $('hudMenu').onclick = () => { pause(true); };
   setupRadio(); $('exploreBtn').onclick = startExplore; setupExplore();
   $('fsBtn').onclick = () => { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el); };

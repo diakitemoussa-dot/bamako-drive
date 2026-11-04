@@ -230,3 +230,9 @@ body.touchhud #sideBtns { display:none !important; }
 #moreTray button { min-height:44px; padding:6px 8px; border-radius:14px; border:1px solid var(--lilac); background:rgba(248,243,234,.1); color:var(--cream); font:600 13px Rubik, Lato, sans-serif; white-space:nowrap; touch-action:manipulation; cursor:pointer; }
 #moreTray button.on { background:var(--gold); color:var(--plum); border-color:var(--gold); }
 #moreTray .sigBtn.on { background:#2d8a3a; border-color:#4ee05c; color:#fff; }
+
+/* --- Voix bambara : sous-titre français dans la bulle, sous-titres flottants, volume des voix --- */
+#mFr { display:none; margin:-2px 0 6px; font-size:12.5px; font-style:italic; color:var(--lilac); line-height:1.3; }
+#voiceSubs { position:fixed; left:50%; bottom:calc(30% + var(--safe-b)); transform:translateX(-50%); z-index:40; max-width:min(560px, 90vw); padding:8px 16px; border-radius:16px; background:rgba(59,44,66,.92); border:2px solid var(--gold); text-align:center; pointer-events:none; font-family:Lato, 'Open Sans', sans-serif; }
+#voiceSubs b { display:block; font:700 16px Rubik, Lato, sans-serif; color:var(--cream); } #voiceSubs span { display:block; margin-top:2px; font-size:13px; font-style:italic; color:var(--lilac); } #voiceSubs.hidden { display:none; }
+#voiceVolRow { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:6px 0; color:var(--cream); font-size:14px; } #voiceVolRow input { flex:1; accent-color:var(--gold); }

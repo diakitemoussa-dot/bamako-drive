@@ -3,7 +3,8 @@
 // Le navigateur n'a pas de voix bambara : on lit le français avec les mots bambara écrits comme ils se prononcent (« I ni ce » -> « i ni tché »).
 // Désactivable : localStorage bd_voice = "off".
 import { NAMES_F } from './fare.js';
-import { tr } from './bambara.js';
+import { tr, getLang } from './bambara.js';
+import { playBm, stopVoices, pauseVoices } from '../voixbm.js';
 
 const FEM = new Set(NAMES_F);
 const FEM_RE = /hortense|julie|denise|eloise|brigitte|amelie|marie|celine|paulina|female|femme|google fran[cç]ais|aria|sylvie|chantal|lea\b/i;
@@ -36,7 +37,7 @@ let lastReact = 0;
 /** une phrase de réaction au hasard (kind : crash, fast, ped, crowd, corner) */
 export const reaction = kind => { const a = LINES[kind] || LINES.crash; return a[(Math.random()*a.length) | 0]; };
 /** dit une réaction sans couper trop souvent (1,3 s minimum entre deux) */
-export function react(who, text) { const n = performance.now(); if (n - lastReact < 1300) return; lastReact = n; speak(who, tr(text).spoken, false, text); }
+export function react(who, text) { const n = performance.now(); if (n - lastReact < 1300) return; lastReact = n; const r = tr(text); if (getLang() === 'bm' && playBm(r.text, { prio: 0 })) return; speak(who, r.spoken, false, text); }
 /** les mots bambara tels qu'ils se prononcent, et sans emoji */
 const say = t => t.replace(/\bI ni ce\b/gi, 'i ni tché').replace(/\bA(?:ï|i)+e?(?![a-zà-ÿ])/g, 'aïe').replace(/\bOuille\b/gi, 'ouille').replace(/\bFCFA\b/g, 'francs CFA').replace(/\(([^)]*)\)/g, ', $1,').replace(/[\u{1F300}-\u{1FAFF}☀-➿]/gu, '').replace(/\s+/g, ' ').trim();
 /** ton de chaque phrase selon ce qu'elle dit */
@@ -63,8 +64,8 @@ function unlock() {
   if (was && lastText) setTimeout(() => speak(lastWho, lastText, true, lastSrc), 150);
 }
 for (const ev of ['pointerdown', 'keydown', 'touchstart']) addEventListener(ev, e => { if (e.isTrusted) unlock(); }, { capture: true });
-export function stopSpeech() { if (synth) { synth.cancel(); } hideHint(); }
-export function pauseSpeech(on) { if (synth) { if (on) synth.pause(); else synth.resume(); } }
+export function stopSpeech() { if (synth) { synth.cancel(); } stopVoices(); hideHint(); }
+export function pauseSpeech(on) { if (synth) { if (on) synth.pause(); else synth.resume(); } pauseVoices(on); }
 /** dit la phrase de `who` ; coupe la phrase précédente */
 /** src : la phrase d'origine (française) quand `text` est une traduction — sert à choisir le ton de la voix */
 export function speak(who, text, again = false, src = text) {
